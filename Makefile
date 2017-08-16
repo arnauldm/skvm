@@ -2,20 +2,26 @@
 GCC = gcc -Wall -Wextra -Wconversion -fstack-protector-all
 GCC += -O2
 
+BUILD = build
+
 SRC = $(wildcard *.c)
-OBJ = $(patsubst %.c, %.o, $(SRC))
 INC = $(wildcard *.h)
+OBJ = $(patsubst %.c, $(BUILD)/%.o, $(SRC))
+BIN = $(BUILD)/skvm
 
-all: skvm
+all: $(BUILD) $(BIN)
 
-main: $(OBJ) skvm.c
+$(BUILD):
+	mkdir $@
+
+$(BIN): $(OBJ) 
 	$(GCC) $^ -o $@
 
-%.o: %.c
-	$(GCC) -c $^ 
+$(BUILD)/%.o: %.c
+	$(GCC) -c -o $@ $^ 
 
 indent:
 	indent -kr -nut -pcs $(SRC) $(INC)
 
 clean:
-	rm $(OBJ) main
+	rm -f $(BUILD)/*
