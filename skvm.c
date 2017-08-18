@@ -16,17 +16,22 @@
 #define MBYTE (1<<20)
 #define GBYTE (1<<30)
 
-/* CONFIGURATION BEGIN */
+/***********************
+   CONFIGURATION BEGIN 
+ ***********************/
 
 #define RAM_SIZE (32*MBYTE)     /* Memory in bytes */
 #define KVM_FILE "/dev/kvm"     /* KVM special file */
+#define BIOS_FILE "bios/minibios.bin"
 
 #define IVT_ADDR        0x00000000
-#define LOAD_ADDR       0x00001000      /* Guest */
+#define LOAD_ADDR       0x00007C00      /* Guest */
 #define BIOS_ADDR       0x000f0000
 #define PCI_HOLE_ADDR   0xc0000000      /* PCI hole physical address */
 
-/* CONFIGURATION END */
+/***********************
+   CONFIGURATION END
+ ***********************/
 
 char *vm_ram;                   /* Pointer to allocated RAM for the VM */
 
@@ -42,9 +47,37 @@ void *GPA_to_HVA (uint64_t offset)
     return vm_ram + offset;
 }
 
+/* Real mode interrupt vector table */
+struct ivt_entry {
+    uint16_t offset;
+    uint16_t cs;
+} __attribute__ ((packed));
+
+void set_ivt (uint16_t cs, uint16_t offset, uint16_t vector)
+{
+    struct ivt_entry *ivt = (struct ivt_entry *) GPA_to_HVA (0);
+    ivt[vector].cs = cs;
+    ivt[vector].offset = offset;
+}
+
+/* Dump cs:rip */
+void dump_cs_and_rip (int vcpu_fd)
+{
+    struct kvm_sregs sregs;
+    struct kvm_regs regs;
+    if (ioctl (vcpu_fd, KVM_GET_REGS, &regs) < 0)
+        pexit ("KVM_GET_REGS ioctl");
+    if (ioctl (vcpu_fd, KVM_GET_SREGS, &sregs) < 0)
+        pexit ("KVM_GET_SREGS ioctl");
+    fprintf (stderr, "cs: 0x%x, rip: 0x%llx\n", sregs.cs.selector,
+             regs.rip);
+}
+
+
 int main (int argc, char **argv)
 {
     int guest_file_fd;          /* File descriptor to the guest image file in raw format */
+    int bios_fd;                /* File descriptor to the BIOS rom file */
     int kvm_fd;                 /* Mainly file descriptor to "/dev/kvm" file */
     int vm_fd;                  /* File descriptor to the VM created by KVM API */
     int vcpu_fd;                /* File descriptor to VCPU */
@@ -65,15 +98,10 @@ int main (int argc, char **argv)
     int ret;
     int i;
 
-
     if (argc < 2) {
         fprintf (stderr, "usage : <img>\n");
         exit (1);
     }
-
-    guest_file_fd = open (argv[1], O_RDONLY);
-    if (guest_file_fd == -1)
-        pexit ("open");
 
     /* Open "/dev/kvm" */
     kvm_fd = open (KVM_FILE, O_RDWR);
@@ -85,7 +113,7 @@ int main (int argc, char **argv)
     if (vm_fd < 0)
         pexit ("KVM_CREATE_VM ioctl");
 
-    /* Checking for some extensions */
+    /* Check for some extensions */
     ret = ioctl (kvm_fd, KVM_CHECK_EXTENSION, KVM_CAP_PIT2);
     if (ret != 1)
         pexit ("KVM_CAP_PIT2 must be supported");
@@ -98,7 +126,7 @@ int main (int argc, char **argv)
     if (ret != 1)
         pexit ("KVM_CAP_HLT must be supported");
 
-    /* Enabling in-kernel irqchip (PIC) and PIT */
+    /* Enable in-kernel irqchip (PIC) and PIT */
 
     /*
        ret = ioctl (vm_fd, KVM_CREATE_PIT2, &pit_config);
@@ -134,14 +162,39 @@ int main (int argc, char **argv)
     /* We don't want to use KMS as it can leads to side channel attacks */
     madvise (vm_ram, RAM_SIZE, MADV_UNMERGEABLE);
 
-    /* Allocating physical memory to the guest */
+    /* Allocate physical memory to the guest 
+     * Note - BIOS memory region is set as read-only for the guest kernel. It's
+     * not really needeed as there's not real threat, but it's more "clean"
+     * like that. */
     region = (struct kvm_userspace_memory_region) {
-        .slot = 0, /* bits 0-15 of "slot" specifies the slot id */
-        .flags = 0,
-        .guest_phys_addr = 0, /* start of the VM physical memory */
-        .memory_size = RAM_SIZE, /* bytes */
-        .userspace_addr = (uint64_t) vm_ram, /* start of the userspace allocated memory */
+        .slot = 0,              /* bits 0-15 of "slot" specifies the slot id */
+        .flags = 0,         /* none or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
+        .guest_phys_addr = 0,       /* start of the VM physical memory */
+        .memory_size = 0xf0000,     /* bytes */
+        .userspace_addr = (uint64_t) vm_ram,        /* start of the userspace allocated memory */
     };
+
+    ret = ioctl (vm_fd, KVM_SET_USER_MEMORY_REGION, &region);
+    if (ret < 0)
+        pexit ("KVM_SET_USER_MEMORY_REGION ioctl");
+
+    region = (struct kvm_userspace_memory_region) {
+        .slot = 1,
+        .flags = KVM_MEM_READONLY,
+        .guest_phys_addr = 0xf0000,
+        .memory_size = 1 * MBYTE - 0xf0000,
+        .userspace_addr = (uint64_t) vm_ram + 0xf0000,};
+
+    ret = ioctl (vm_fd, KVM_SET_USER_MEMORY_REGION, &region);
+    if (ret < 0)
+        pexit ("KVM_SET_USER_MEMORY_REGION ioctl");
+
+    region = (struct kvm_userspace_memory_region) {
+        .slot = 2,
+        .flags = 0,
+        .guest_phys_addr = 1 * MBYTE,
+        .memory_size = RAM_SIZE - 1 * MBYTE,
+        .userspace_addr = (uint64_t) vm_ram + 1 * MBYTE,};
 
     ret = ioctl (vm_fd, KVM_SET_USER_MEMORY_REGION, &region);
     if (ret < 0)
@@ -167,13 +220,12 @@ int main (int argc, char **argv)
     if (kvm_run == MAP_FAILED)
         pexit ("unable to mmap vcpu fd");
 
-
-    /* Settings guest registers */
+    /* Set guest registers */
     ret = ioctl (vcpu_fd, KVM_GET_SREGS, &sregs);
     if (ret < 0)
         pexit ("KVM_GET_SREGS ioctl");
 
-    sregs.cs.base = 0;          /* FIXME */
+    sregs.cs.base = 0;
     sregs.cs.selector = 0;
 
     ret = ioctl (vcpu_fd, KVM_SET_SREGS, &sregs);
@@ -191,16 +243,43 @@ int main (int argc, char **argv)
     if (ret < 0)
         pexit ("KVM_SET_REGS ioctl");
 
-    /* Copy virtualized code here */
-    i = LOAD_ADDR;
+    /* 
+     * Set real mode environement 
+     */
+
+    /* Set the real mode Interrupt Vector Table */
+    set_ivt (0xf000, 0xf065, 0x10);     /* cs register, offset, vector */
+    set_ivt (0xf000, 0xe3fe, 0x13);     /* cs register, offset, vector */
+
+    /* Copy BIOS in memory */
+    bios_fd = open (BIOS_FILE, O_RDONLY);
+    if (bios_fd == -1)
+        pexit ("open");
+
+    i = BIOS_ADDR;
     do {
-        ret = (int) read (guest_file_fd, &vm_ram[i], 4096);
+        ret = (int) read (bios_fd, &vm_ram[i], 4096);
         if (ret < 0)
             pexit ("read");
         i += ret;
+
+        /* BIOS binary must not overlap 0x100000 barrier */
+        if (i > 0x100000)
+            break;
     } while (ret > 0);
 
+    /* Open the guest disk image */
+    guest_file_fd = open (argv[1], O_RDONLY);
+    if (guest_file_fd == -1)
+        pexit ("open");
 
+    /* Copy virtualized code 
+     * Note - we only read and load disk's MBR (the first 512 bytes) */
+    ret = (int) read (guest_file_fd, &vm_ram[LOAD_ADDR], 512);
+    if (ret < 0)
+        pexit ("read");
+
+    /* Run the VM */
     while (1) {
         ret = ioctl (vcpu_fd, KVM_RUN, 0);
         if (ret < 0)
@@ -222,6 +301,8 @@ int main (int argc, char **argv)
             } else {
                 fprintf (stderr, "unhandled KVM_EXIT_IO (port: 0x%x)\n",
                          kvm_run->io.port);
+                dump_cs_and_rip (vcpu_fd);
+                return 1;
             }
             break;
 
@@ -229,6 +310,11 @@ int main (int argc, char **argv)
             fprintf (stderr,
                      "KVM_EXIT_FAIL_ENTRY: fail_entry.hardware_entry_failure_reason: = 0x%llx\n",
                      kvm_run->fail_entry.hardware_entry_failure_reason);
+            return 1;
+
+        case KVM_EXIT_MMIO:
+            fprintf (stderr,
+                     "KVM_EXIT_MMIO: guest trying to overwrite read-only memory\n");
             return 1;
 
         default:
