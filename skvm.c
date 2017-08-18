@@ -59,7 +59,7 @@ int main (int argc, char **argv)
     struct kvm_regs regs;
 
     /* The following KVM specific structs are defined in /usr/include/linux/kvm.h */
-    struct kvm_pit_config pit_config = {.flags = 0 };
+    /* struct kvm_pit_config pit_config = {.flags = 0 }; */
     struct kvm_userspace_memory_region region;
 
     int ret;
