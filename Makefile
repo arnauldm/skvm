@@ -11,7 +11,7 @@ OBJ = $(patsubst %.c, $(BUILD)/%.o, $(SRC))
 
 BIN = $(BUILD)/skvm
 GUEST = $(BUILD)/guest
-BIOS = bios/minibios.bin
+BIOS = $(BUILD)/minibios
 
 all: $(BUILD) $(BIN) $(GUEST) $(BIOS)
 
@@ -35,3 +35,6 @@ indent:
 
 clean:
 	rm -f $(BUILD)/* $(BIOS) *~
+
+run: $(BIN) $(GUEST) $(BIOS)
+	@$(BIN) --guest $(GUEST) --bios $(BIOS)

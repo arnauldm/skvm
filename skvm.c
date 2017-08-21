@@ -1,4 +1,6 @@
+#include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -22,7 +24,6 @@
 
 #define RAM_SIZE (32*MBYTE)     /* Memory in bytes */
 #define KVM_FILE "/dev/kvm"     /* KVM special file */
-#define BIOS_FILE "bios/minibios.bin"
 
 #define IVT_ADDR        0x00000000
 #define LOAD_ADDR       0x00007C00      /* Guest */
@@ -34,6 +35,13 @@
  ***********************/
 
 char *vm_ram;                   /* Pointer to allocated RAM for the VM */
+
+void usage ()
+{
+    fprintf (stderr,
+             "usage: [OPTIONS]\n--bios, -b\tbios file\n--guest, -g\tguest file\n");
+    exit (1);
+}
 
 void pexit (char *s)
 {
@@ -76,7 +84,10 @@ void dump_cs_and_rip (int vcpu_fd)
 
 int main (int argc, char **argv)
 {
-    int guest_file_fd;          /* File descriptor to the guest image file in raw format */
+    char *guest_file = NULL;
+    char *bios_file = NULL;
+
+    int guest_fd;               /* File descriptor to the guest image file in raw format */
     int bios_fd;                /* File descriptor to the BIOS rom file */
     int kvm_fd;                 /* Mainly file descriptor to "/dev/kvm" file */
     int vm_fd;                  /* File descriptor to the VM created by KVM API */
@@ -95,25 +106,47 @@ int main (int argc, char **argv)
     /* struct kvm_pit_config pit_config = {.flags = 0 }; */
     struct kvm_userspace_memory_region region;
 
-    int ret;
-    int i;
+    int ret, i;
 
-    if (argc < 2) {
-        fprintf (stderr, "usage : <img>\n");
-        exit (1);
+    /* Parsing options */
+    while (1) {
+        static struct option long_options[] = {
+            {"bios", required_argument, 0, 'b'},
+            {"guest", required_argument, 0, 'g'},
+            {0, 0, 0, 0}
+        };
+
+        int index = 0;
+        int c = getopt_long (argc, argv, "b:g:", long_options, &index);
+
+        if (c == -1)
+            break;
+
+        switch (c) {
+        case 'b':
+            bios_file = optarg;
+            break;
+        case 'g':
+            guest_file = optarg;
+            break;
+        default:
+            break;
+        }
     }
+
+    if (bios_file == NULL || guest_file == NULL)
+        usage ();
+
+    /*********************** 
+     * Create and set a VM
+     ***********************/
 
     /* Open "/dev/kvm" */
     kvm_fd = open (KVM_FILE, O_RDWR);
     if (kvm_fd == -1)
-        pexit ("open");
+        pexit (KVM_FILE);
 
-    /* Create a vm */
-    vm_fd = ioctl (kvm_fd, KVM_CREATE_VM, 0);
-    if (vm_fd < 0)
-        pexit ("KVM_CREATE_VM ioctl");
-
-    /* Check for some extensions */
+    /* Check for some KVM extensions */
     ret = ioctl (kvm_fd, KVM_CHECK_EXTENSION, KVM_CAP_PIT2);
     if (ret != 1)
         pexit ("KVM_CAP_PIT2 must be supported");
@@ -125,6 +158,11 @@ int main (int argc, char **argv)
     ret = ioctl (kvm_fd, KVM_CHECK_EXTENSION, KVM_CAP_HLT);
     if (ret != 1)
         pexit ("KVM_CAP_HLT must be supported");
+
+    /* Create the vm */
+    vm_fd = ioctl (kvm_fd, KVM_CREATE_VM, 0);
+    if (vm_fd < 0)
+        pexit ("KVM_CREATE_VM ioctl");
 
     /* Enable in-kernel irqchip (PIC) and PIT */
 
@@ -142,7 +180,7 @@ int main (int argc, char **argv)
      * guest physical address space.  The region must be within the first 4GB
      * of the guest physical address space and must not conflict with any
      * memory slot or any mmio address."
-     * Note - shouldn't be needed without guest user tasks
+     * Note - shouldn't be needed without guest user tasks executing in ring3
      */
     ret = ioctl (vm_fd, KVM_SET_TSS_ADDR, 0xfffbd000);
     if (ret < 0)
@@ -167,11 +205,11 @@ int main (int argc, char **argv)
      * not really needeed as there's not real threat, but it's more "clean"
      * like that. */
     region = (struct kvm_userspace_memory_region) {
-        .slot = 0,              /* bits 0-15 of "slot" specifies the slot id */
-        .flags = 0,         /* none or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
+        .slot = 0,                  /* bits 0-15 of "slot" specifies the slot id */
+        .flags = 0,                 /* none or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
         .guest_phys_addr = 0,       /* start of the VM physical memory */
         .memory_size = 0xf0000,     /* bytes */
-        .userspace_addr = (uint64_t) vm_ram,        /* start of the userspace allocated memory */
+        .userspace_addr = (uint64_t) vm_ram,    /* start of the userspace allocated memory */
     };
 
     ret = ioctl (vm_fd, KVM_SET_USER_MEMORY_REGION, &region);
@@ -243,18 +281,18 @@ int main (int argc, char **argv)
     if (ret < 0)
         pexit ("KVM_SET_REGS ioctl");
 
-    /* 
+    /***************************** 
      * Set real mode environement 
-     */
+     *****************************/
 
     /* Set the real mode Interrupt Vector Table */
     set_ivt (0xf000, 0xf065, 0x10);     /* cs register, offset, vector */
     set_ivt (0xf000, 0xe3fe, 0x13);     /* cs register, offset, vector */
 
     /* Copy BIOS in memory */
-    bios_fd = open (BIOS_FILE, O_RDONLY);
+    bios_fd = open (bios_file, O_RDONLY);
     if (bios_fd == -1)
-        pexit ("open");
+        pexit (bios_file);
 
     i = BIOS_ADDR;
     do {
@@ -269,17 +307,20 @@ int main (int argc, char **argv)
     } while (ret > 0);
 
     /* Open the guest disk image */
-    guest_file_fd = open (argv[1], O_RDONLY);
-    if (guest_file_fd == -1)
-        pexit ("open");
+    guest_fd = open (guest_file, O_RDONLY);
+    if (guest_fd == -1)
+        pexit (guest_file);
 
     /* Copy virtualized code 
      * Note - we only read and load disk's MBR (the first 512 bytes) */
-    ret = (int) read (guest_file_fd, &vm_ram[LOAD_ADDR], 512);
+    ret = (int) read (guest_fd, &vm_ram[LOAD_ADDR], 512);
     if (ret < 0)
         pexit ("read");
 
-    /* Run the VM */
+    /**************
+     * Run the VM 
+     **************/
+
     while (1) {
         ret = ioctl (vcpu_fd, KVM_RUN, 0);
         if (ret < 0)
