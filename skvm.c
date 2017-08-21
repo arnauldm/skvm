@@ -286,8 +286,8 @@ int main (int argc, char **argv)
      *****************************/
 
     /* Set the real mode Interrupt Vector Table */
-    set_ivt (0xf000, 0xf065, 0x10);     /* cs register, offset, vector */
-    set_ivt (0xf000, 0xe3fe, 0x13);     /* cs register, offset, vector */
+    set_ivt (0xf000, 0xf065, 0x10); /* selector, offset, vector */
+    set_ivt (0xf000, 0xe3fe, 0x13);
 
     /* Copy BIOS in memory */
     bios_fd = open (bios_file, O_RDONLY);
