@@ -4,27 +4,40 @@
 ; Important note: BIOS is loaded in RAM at F0000h
 
 ;-----------------------------------------------------------------------------
+[SECTION error_handler, start=0xf0000]
+  mov si, msg
+  call error
+  hlt
+
+
+;-----------------------------------------------------------------------------
 [SECTION int10_handler, start=0xff065]
 
 int10_handler:
   push dx
+  cmp ah, 0x0e
+  jnz .error
   mov dx, 0x3f8
   out dx, al
   pop dx
   iret
 
+.error:
+  mov si, msg10
+  call error
+  hlt
+
 ;-----------------------------------------------------------------------------
 [SECTION int13_handler, start=0xfe3fe]
 
 int13_handler:
+  mov si, msg13
   call error
+  hlt
 
 ;-----------------------------------------------------------------------------
 error:
-  push si
-  mov si, msg
   call display 
-  pop si
   hlt
 
 ;-----------------------------------------------------------------------------
@@ -49,5 +62,7 @@ display:
   pop ax
   ret
 
-msg db "minibios: int 13h is not implemented", 10, 0
+msg   db "minibios: INT ??h is not implemented", 10, 0
+msg10 db "minibios: INT 10h is not fully implemented", 10, 0
+msg13 db "minibios: INT 13h is not implemented", 10, 0
 
