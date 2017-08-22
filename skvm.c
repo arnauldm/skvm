@@ -14,6 +14,11 @@
 #include <linux/kvm.h>
 #include <x86_64-linux-gnu/asm/kvm.h>
 
+
+extern void pexit (char *);
+extern void handle_KVM_EXIT_IO (int, struct kvm_run *);
+
+
 #define KBYTE (1<<10)
 #define MBYTE (1<<20)
 #define GBYTE (1<<30)
@@ -43,12 +48,6 @@ void usage ()
     exit (1);
 }
 
-void pexit (char *s)
-{
-    perror (s);
-    exit (1);
-}
-
 /* Guest physical address to host virtual address */
 void *GPA_to_HVA (uint64_t offset)
 {
@@ -66,19 +65,6 @@ void set_ivt (uint16_t cs, uint16_t offset, uint16_t vector)
     struct ivt_entry *ivt = (struct ivt_entry *) GPA_to_HVA (0);
     ivt[vector].cs = cs;
     ivt[vector].offset = offset;
-}
-
-/* Dump cs:rip */
-void dump_cs_and_rip (int vcpu_fd)
-{
-    struct kvm_sregs sregs;
-    struct kvm_regs regs;
-    if (ioctl (vcpu_fd, KVM_GET_REGS, &regs) < 0)
-        pexit ("KVM_GET_REGS ioctl");
-    if (ioctl (vcpu_fd, KVM_GET_SREGS, &sregs) < 0)
-        pexit ("KVM_GET_SREGS ioctl");
-    fprintf (stderr, "cs: 0x%x, rip: 0x%llx\n", sregs.cs.selector,
-             regs.rip);
 }
 
 
@@ -205,34 +191,12 @@ int main (int argc, char **argv)
      * not really needeed as there's not real threat, but it's more "clean"
      * like that. */
     region = (struct kvm_userspace_memory_region) {
-        .slot = 0,                  /* bits 0-15 of "slot" specifies the slot id */
-        .flags = 0,                 /* none or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
+        .slot = 0,   /* bits 0-15 of "slot" specifies the slot id */
+        .flags = 0,  /* none or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
         .guest_phys_addr = 0,       /* start of the VM physical memory */
-        .memory_size = 0xf0000,     /* bytes */
-        .userspace_addr = (uint64_t) vm_ram,    /* start of the userspace allocated memory */
+        .memory_size = RAM_SIZE,     /* bytes */
+        .userspace_addr = (uint64_t) vm_ram,  /* start of the userspace allocated memory */
     };
-
-    ret = ioctl (vm_fd, KVM_SET_USER_MEMORY_REGION, &region);
-    if (ret < 0)
-        pexit ("KVM_SET_USER_MEMORY_REGION ioctl");
-
-    region = (struct kvm_userspace_memory_region) {
-        .slot = 1,
-        .flags = KVM_MEM_READONLY,
-        .guest_phys_addr = 0xf0000,
-        .memory_size = 1 * MBYTE - 0xf0000,
-        .userspace_addr = (uint64_t) vm_ram + 0xf0000,};
-
-    ret = ioctl (vm_fd, KVM_SET_USER_MEMORY_REGION, &region);
-    if (ret < 0)
-        pexit ("KVM_SET_USER_MEMORY_REGION ioctl");
-
-    region = (struct kvm_userspace_memory_region) {
-        .slot = 2,
-        .flags = 0,
-        .guest_phys_addr = 1 * MBYTE,
-        .memory_size = RAM_SIZE - 1 * MBYTE,
-        .userspace_addr = (uint64_t) vm_ram + 1 * MBYTE,};
 
     ret = ioctl (vm_fd, KVM_SET_USER_MEMORY_REGION, &region);
     if (ret < 0)
@@ -276,6 +240,7 @@ int main (int argc, char **argv)
 
     regs.rip = LOAD_ADDR;
     regs.rflags = 2;            /* bit 1 is reserved and must be set */
+    regs.rdx = 0x80;            /* DL = 80h - 1st hard disk */
 
     ret = ioctl (vcpu_fd, KVM_SET_REGS, &regs);
     if (ret < 0)
@@ -287,37 +252,39 @@ int main (int argc, char **argv)
 
     /* Set the real mode Interrupt Vector Table */
     /* selector, offset, vector */
-    set_ivt (0xf000, 0x2222, 0x00); /* ? */
-    set_ivt (0xf000, 0x2222, 0x01); /* ? */
-    set_ivt (0xf000, 0x2222, 0x02); /* ? */
-    set_ivt (0xf000, 0x2222, 0x03); /* ? */
-    set_ivt (0xf000, 0x2222, 0x04); /* ? */
-    set_ivt (0xf000, 0x2222, 0x05); /* ? */
-    set_ivt (0xf000, 0x2222, 0x06); /* ? */
-    set_ivt (0xf000, 0x2222, 0x07); /* ? */
-    set_ivt (0xf000, 0x2222, 0x08); /* System timer */
-    set_ivt (0xf000, 0x2222, 0x09); /* Keyboard */
-    set_ivt (0xf000, 0x2222, 0x0A); /* ? */
-    set_ivt (0xf000, 0x2222, 0x0B); /* ? */
-    set_ivt (0xf000, 0x2222, 0x0C); /* ? */
-    set_ivt (0xf000, 0x2222, 0x0D); /* ? */
-    set_ivt (0xf000, 0x2222, 0x0E); /* ? */
-    set_ivt (0xf000, 0x2222, 0x0F); /* ? */
+    set_ivt (0xf000, 0x2222, 0x00);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x01);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x02);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x03);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x04);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x05);     /* ? */
 
-    set_ivt (0xf000, 0xf065, 0x10); /* VGA */
+    set_ivt (0xf000, 0x1000, 0x06);     /* Invalid opcode */
 
-    set_ivt (0xf000, 0x2222, 0x11); /* Equipment list */
-    set_ivt (0xf000, 0x2222, 0x12); /* Memory size */
+    set_ivt (0xf000, 0x2222, 0x07);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x08);     /* System timer */
+    set_ivt (0xf000, 0x2222, 0x09);     /* Keyboard */
+    set_ivt (0xf000, 0x2222, 0x0A);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x0B);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x0C);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x0D);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x0E);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x0F);     /* ? */
 
-    set_ivt (0xf000, 0xe3fe, 0x13); /* disk */
+    set_ivt (0xf000, 0xf000, 0x10);     /* VGA */
 
-    set_ivt (0xf000, 0x2222, 0x14); /* Serial communication */
-    set_ivt (0xf000, 0x2222, 0x15); /* System services */
-    set_ivt (0xf000, 0x2222, 0x16); /* ? */
-    set_ivt (0xf000, 0x2222, 0x17); /* ? */
-    set_ivt (0xf000, 0x2222, 0x18); /* ? */
-    set_ivt (0xf000, 0x2222, 0x19); /* Boot load */
-    set_ivt (0xf000, 0x2222, 0x1A); /* ? */
+    set_ivt (0xf000, 0x2222, 0x11);     /* Equipment list */
+    set_ivt (0xf000, 0x2222, 0x12);     /* Memory size */
+
+    set_ivt (0xf000, 0xe000, 0x13);     /* disk */
+
+    set_ivt (0xf000, 0x2222, 0x14);     /* Serial communication */
+    set_ivt (0xf000, 0x2222, 0x15);     /* System services */
+    set_ivt (0xf000, 0x2222, 0x16);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x17);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x18);     /* ? */
+    set_ivt (0xf000, 0x2222, 0x19);     /* Boot load */
+    set_ivt (0xf000, 0x2222, 0x1A);     /* ? */
 
 
     /* Copy BIOS in memory */
@@ -364,18 +331,7 @@ int main (int argc, char **argv)
             return 0;
 
         case KVM_EXIT_IO:
-            /* if output to default serial port COM0 */
-            if (kvm_run->io.port == 0x3f8
-                && kvm_run->io.direction == KVM_EXIT_IO_OUT) {
-                write (STDERR_FILENO,
-                       (char *) (kvm_run) + kvm_run->io.data_offset,
-                       kvm_run->io.size);
-            } else {
-                fprintf (stderr, "unhandled KVM_EXIT_IO (port: 0x%x)\n",
-                         kvm_run->io.port);
-                dump_cs_and_rip (vcpu_fd);
-                return 1;
-            }
+            handle_KVM_EXIT_IO (vcpu_fd, kvm_run);
             break;
 
         case KVM_EXIT_FAIL_ENTRY:

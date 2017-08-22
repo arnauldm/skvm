@@ -14,7 +14,7 @@ all: $(BUILD) $(BIN) $(GUEST) $(BIOS)
 $(BUILD):
 	mkdir $@
 
-$(BIN): $(BUILD)/skvm.o
+$(BIN): $(BUILD)/skvm.o $(BUILD)/skvm_exit_io.o $(BUILD)/skvm_util.o
 	$(GCC) -o $@ $^
 
 $(BUILD)/%.o: %.c
@@ -23,12 +23,12 @@ $(BUILD)/%.o: %.c
 $(GUEST): guest16.asm
 	nasm -f bin -o $@ $^
 
-$(BIOS): bios.c
+$(BIOS): bios/bios.c
 	bcc -W -0 -S -o $(BUILD)/bios.s $^
 	as86 -b $@ $(BUILD)/bios.s
 
 indent:
-	indent -kr -nut -pcs *.c *.h
+	indent -kr -nut -pcs *.c 
 
 clean:
 	rm -f $(BUILD)/* $(BIOS) *~
