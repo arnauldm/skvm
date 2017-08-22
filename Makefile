@@ -5,10 +5,6 @@ GCC += -g
 
 BUILD = build
 
-SRC = $(wildcard *.c)
-INC = $(wildcard *.h)
-OBJ = $(patsubst %.c, $(BUILD)/%.o, $(SRC))
-
 BIN = $(BUILD)/skvm
 GUEST = $(BUILD)/guest
 BIOS = $(BUILD)/minibios
@@ -18,23 +14,25 @@ all: $(BUILD) $(BIN) $(GUEST) $(BIOS)
 $(BUILD):
 	mkdir $@
 
-$(BIN): $(OBJ) 
+$(BIN): $(BUILD)/skvm.o
 	$(GCC) -o $@ $^
 
 $(BUILD)/%.o: %.c
 	$(GCC) -c -o $@ $^ 
 
-$(GUEST): code16.asm
+$(GUEST): guest16.asm
 	nasm -f bin -o $@ $^
 
-$(BIOS): bios.asm
-	nasm -f bin -o $@ $^
+$(BIOS): bios.c
+	bcc -W -0 -S -o $(BUILD)/bios.s $^
+	as86 -b $@ $(BUILD)/bios.s
 
 indent:
-	indent -kr -nut -pcs $(SRC) $(INC)
+	indent -kr -nut -pcs *.c *.h
 
 clean:
 	rm -f $(BUILD)/* $(BIOS) *~
 
 run: $(BIN) $(GUEST) $(BIOS)
+	@echo launch: $(BIN) --guest $(GUEST) --bios $(BIOS)
 	@$(BIN) --guest $(GUEST) --bios $(BIOS)
