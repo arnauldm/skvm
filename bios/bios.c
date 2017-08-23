@@ -9,25 +9,14 @@
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
 
+#define PORT_SERIAL 0x3f8
+
 #define GET_AL() ( AX & 0x00ff )
 #define GET_AH() *(((uint8_t *)&AX)+1)
 
 //---------------------------------------------------------------------------
 #asm
 .org 0x0
-// INT 13h treatment takes place in `skvm.c' VMM. The call is made via a
-// "special" OUT instruction, thus clobbering dx register. That variable is
-// mapped at a fixed offset: it's a convenient way for the hypervisor to
-// retrieve it
-saved_dx:
-    dw 0
-
-saved_ip:
-    dw 0
-
-saved_cs:
-    dw 0
-
 msg:
     .ascii "minibios: INT ??h is not implemented\n"
     db 0
@@ -42,18 +31,57 @@ msg10:
 #endasm
 
 
+#asm
+.org 0x100
+#endasm
+
 void outb (port, val)
     uint16_t port;
     uint8_t val;
 {
 #asm
-    push ax 
-    push dx 
-    mov dx, 4[bp]
-    mov al, 6[bp]
-    out dx, al 
-    pop dx 
-    pop ax
+    push bp
+    mov  bp, sp
+
+    push ax
+    push dx
+    mov  dx, 4[bp]
+    mov  al, 6[bp]
+    out  dx, al
+    pop  dx
+    pop  ax
+
+    pop  bp
+#endasm
+}
+
+void serial_print (s)
+    uint8_t *s;
+{
+    while (*s) {
+        outb (PORT_SERIAL, *s);
+        s++;
+    }
+}
+
+void int13_c_handler (DS, ES, DI, SI, BP, temp_SP, BX, DX, CX, AX, FLAGS)
+  uint16_t DS, ES, DI, SI, BP, temp_SP, BX, DX, CX, AX, FLAGS;
+{
+    serial_print ("INT 13h\n");
+
+    switch (GET_AH()) {
+        case 0x08:
+            serial_print ("int13_c_handler - service 0x08\n");
+            break;
+        case 0x41:
+            serial_print ("int13_c_handler - service 0x41\n");
+            FLAGS |= 0x0001; // Set CF
+            break;
+        default:
+            break;   
+    }
+#asm
+    hlt
 #endasm
 }
 
@@ -63,105 +91,70 @@ void outb (port, val)
 
 .org 0x1000 
 debug_handler:
-    push bp
-    mov bp, sp
-
-    push ax
     push ds 
-
+    push ax
     mov ax, #0xf000
     mov ds, ax 
-
-    mov ax, 2[bp]
-    mov saved_ip, ax
-    mov ax, 4[bp]
-    mov saved_cs, ax
-
-    pop ds
     pop ax
-    pop bp
 
-    push si
-    mov si, #opcode
-    call display 
-    pop si
+    push #opcode
+    call _serial_print 
+
+    push dx
     mov dx, #0xff00 // Special port created on purpose
     out dx, al 
-    hlt
+    pop dx
 
-//---------------------------------------------------------------------------
-.org 0x2222 
-default_handler:
-    push si
-    mov si, #msg
-    call display 
-    pop si
+    pop ds
     hlt
 
 //---------------------------------------------------------------------------
 .org 0xe000 
 int13_handler:
-
-    push bp
-    mov bp, sp
-
-    push dx
-
+    push ds
     push ax
-    push ds 
-
-    mov ax, #0xf000
+    mov ax, #0xf000 
     mov ds, ax 
-
-    mov ax, 2[bp]
-    mov saved_ip, ax
-    mov ax, 4[bp]
-    mov saved_cs, ax
-    mov saved_dx, dx // `saved_dx' variable is mapped at a fixed offset, thus
-                     // skvm can easily retrieve it
-    pop ds
     pop ax
 
-    mov dx, #0xff13 // Special port created on purpose
-    out dx, al 
+    pushf 
+    pusha // AX, CX, DX, BX, temp, BP, SI, DI
+    push es
+    push ds
 
-    pop dx
-    pop bp
+    call _int13_c_handler
 
+    pop ds
+    pop es
+    popa
+    popf
+
+    pop ds
     iret
 
 //---------------------------------------------------------------------------
 .org 0xf000 // INT 10 h Video Support Service Entry Point 
 int10_handler:
-    push dx 
+    // set DS
+    push ds
+    push ax
+    mov ax, #0xf000 
+    mov ds, ax 
+    pop ax
+
     cmp ah, #0x0e
     jnz .error 
-    mov dx, #0x3f8
+
+    push dx 
+    mov dx, #PORT_SERIAL
     out dx, al 
     pop dx 
+
+    pop ds
     iret
 .error:
-    mov si, #msg10
-    call display
+    push #msg10
+    call _serial_print
     hlt 
-
-display:
-    push ax
-    push dx 
-    push ds 
-    mov ax, #0xf000
-    mov ds, ax 
-    mov dx, #0x3f8
-.start:
-    lodsb 
-    cmp al, #0    // end of string (NULL character) ?
-    jz .end 
-    out dx, al 
-    jmp .start
-.end:
-    pop ds 
-    pop dx 
-    pop ax 
-    ret
 #endasm
 

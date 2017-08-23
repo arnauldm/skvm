@@ -14,49 +14,36 @@
 #include <linux/kvm.h>
 #include <x86_64-linux-gnu/asm/kvm.h>
 
-extern void pexit (char *);
-extern void dump_sregs (int);
-extern void dump_regs (int);
-extern char *vm_ram;
+
+#define __EXIT_IO__
+#include "skvm_exit.h"
+#include "skvm_debug.h"
+#include "skvm.h"
 
 
-void handle_serial (int, struct kvm_run*);
-void handle_bios_int13 (int, struct kvm_run*);
-
-
-void handle_KVM_EXIT_IO (int vcpu_fd, struct kvm_run *kvm_run)
+void handle_exit_io (int vcpu_fd, struct kvm_run *kvm_run)
 {
-    uint16_t cs, ip;
-
     switch (kvm_run->io.port) {
+
         /* default serial port COM0 */
         case 0x3f8:
-            handle_serial (vcpu_fd, kvm_run);
-            break;
-
-        /* called by bios interrupt handler `int13_handler' to implement it in `skvm' */
-        case 0xff13:
-            handle_bios_int13 (vcpu_fd, kvm_run);
+            handle_exit_io_serial (vcpu_fd, kvm_run);
             break;
 
         default:
             fprintf (stderr, "skvm: unhandled KVM_EXIT_IO (port: 0x%x)\n",
                  kvm_run->io.port);
             dump_regs (vcpu_fd);
-            ip = *((uint16_t*) (vm_ram+0xf0002));
-            cs = *((uint16_t*) (vm_ram+0xf0004));
-            fprintf (stderr, "  saved ip: 0x%x\n", ip);
-            fprintf (stderr, "  saved cs: 0x%x\n", cs);
+            dump_sregs (vcpu_fd);
+            dump_real_mode_stack (vcpu_fd);
             exit (1);
     }
 }
 
-void handle_bios_int13 (int vcpu_fd, struct kvm_run *kvm_run)
+void handle_exit_io_bios_int13 (int vcpu_fd, struct kvm_run *kvm_run)
 {
     struct kvm_regs regs;
     uint8_t ah;
-    uint16_t dx;
-    uint16_t cs, ip;
 
     if (ioctl (vcpu_fd, KVM_GET_REGS, &regs) < 0)
         pexit ("KVM_GET_REGS ioctl");
@@ -92,18 +79,12 @@ void handle_bios_int13 (int vcpu_fd, struct kvm_run *kvm_run)
             fprintf (stderr, "skvm: unhandled INT 13h (port: 0x%x)\n",
                  kvm_run->io.port);
             dump_regs (vcpu_fd);
-            dx = *((uint16_t*) vm_ram + 0xf0000);
-            ip = *((uint16_t*) (vm_ram+0xf0002));
-            cs = *((uint16_t*) (vm_ram+0xf0004));
-            fprintf (stderr, "  saved dx: 0x%x\n", dx);
-            fprintf (stderr, "  saved ip: 0x%x\n", ip);
-            fprintf (stderr, "  saved cs: 0x%x\n", cs);
             exit (1);
     }
 }
 
 
-void handle_serial (int vcpu_fd, struct kvm_run *kvm_run)
+void handle_exit_io_serial (int vcpu_fd, struct kvm_run *kvm_run)
 {
     if (kvm_run->io.direction == KVM_EXIT_IO_OUT) {
 
@@ -124,4 +105,14 @@ void handle_serial (int vcpu_fd, struct kvm_run *kvm_run)
         exit (1);
     }
 }
+
+void handle_exit_hlt (int vcpu_fd)
+{
+    dump_regs (vcpu_fd);
+    dump_sregs (vcpu_fd);
+    dump_real_mode_stack (vcpu_fd);
+    fprintf (stderr, "Guest halted\n");
+    exit (0);
+}
+
 

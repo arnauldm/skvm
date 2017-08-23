@@ -1,0 +1,5 @@
+
+* Kernel documentation, in linux/Documentation/virtual/kvm/
+* Josh Triplett, Using the KVM API, https://lwn.net/Articles/658511/, September 29, 2015
+* https://github.com/kvmtool/kvmtool
+* https://david.wragg.org/blog/2016/06/kvm-hello-world.html (also https://github.com/dpw/kvm-hello-world)

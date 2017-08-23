@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -14,32 +15,25 @@
 #include <linux/kvm.h>
 #include <x86_64-linux-gnu/asm/kvm.h>
 
-
-extern void pexit (char *);
-extern void handle_KVM_EXIT_IO (int, struct kvm_run *);
-
-
-#define KBYTE (1<<10)
-#define MBYTE (1<<20)
-#define GBYTE (1<<30)
-
-/***********************
-   CONFIGURATION BEGIN 
- ***********************/
-
-#define RAM_SIZE (32*MBYTE)     /* Memory in bytes */
-#define KVM_FILE "/dev/kvm"     /* KVM special file */
-
-#define IVT_ADDR        0x00000000
-#define LOAD_ADDR       0x00007C00      /* Guest */
-#define BIOS_ADDR       0x000f0000
-#define PCI_HOLE_ADDR   0xc0000000      /* PCI hole physical address */
-
-/***********************
-   CONFIGURATION END
- ***********************/
+#define __DEBUG__
+#define __SKVM__
+#include "skvm.h"
+#include "skvm_exit.h"
 
 char *vm_ram;                   /* Pointer to allocated RAM for the VM */
+
+void pexit (char *s)
+{
+    perror (s);
+    exit (1);
+}
+
+#ifdef __DEBUG__
+#define DEBUG(fmt, ...) \
+            do { fprintf(stderr, fmt, __VA_ARGS__); } while (0)
+#else
+#define DEBUG(fmt, ...) 
+#endif
 
 void usage ()
 {
@@ -252,40 +246,37 @@ int main (int argc, char **argv)
 
     /* Set the real mode Interrupt Vector Table */
     /* selector, offset, vector */
-    set_ivt (0xf000, 0x2222, 0x00);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x01);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x02);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x03);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x04);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x05);     /* ? */
-
+    set_ivt (0xf000, 0x1000, 0x00);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x01);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x02);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x03);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x04);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x05);     /* ? */
     set_ivt (0xf000, 0x1000, 0x06);     /* Invalid opcode */
-
-    set_ivt (0xf000, 0x2222, 0x07);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x08);     /* System timer */
-    set_ivt (0xf000, 0x2222, 0x09);     /* Keyboard */
-    set_ivt (0xf000, 0x2222, 0x0A);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x0B);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x0C);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x0D);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x0E);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x0F);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x07);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x08);     /* System timer */
+    set_ivt (0xf000, 0x1000, 0x09);     /* Keyboard */
+    set_ivt (0xf000, 0x1000, 0x0A);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x0B);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x0C);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x0D);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x0E);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x0F);     /* ? */
 
     set_ivt (0xf000, 0xf000, 0x10);     /* VGA */
 
-    set_ivt (0xf000, 0x2222, 0x11);     /* Equipment list */
-    set_ivt (0xf000, 0x2222, 0x12);     /* Memory size */
+    set_ivt (0xf000, 0x1000, 0x11);     /* Equipment list */
+    set_ivt (0xf000, 0x1000, 0x12);     /* Memory size */
 
     set_ivt (0xf000, 0xe000, 0x13);     /* disk */
 
-    set_ivt (0xf000, 0x2222, 0x14);     /* Serial communication */
-    set_ivt (0xf000, 0x2222, 0x15);     /* System services */
-    set_ivt (0xf000, 0x2222, 0x16);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x17);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x18);     /* ? */
-    set_ivt (0xf000, 0x2222, 0x19);     /* Boot load */
-    set_ivt (0xf000, 0x2222, 0x1A);     /* ? */
-
+    set_ivt (0xf000, 0x1000, 0x14);     /* Serial communication */
+    set_ivt (0xf000, 0x1000, 0x15);     /* System services */
+    set_ivt (0xf000, 0x1000, 0x16);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x17);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x18);     /* ? */
+    set_ivt (0xf000, 0x1000, 0x19);     /* Boot load */
+    set_ivt (0xf000, 0x1000, 0x1A);     /* ? */
 
     /* Copy BIOS in memory */
     bios_fd = open (bios_file, O_RDONLY);
@@ -309,11 +300,25 @@ int main (int argc, char **argv)
     if (guest_fd == -1)
         pexit (guest_file);
 
-    /* Copy virtualized code 
-     * Note - we only read and load disk's MBR (the first 512 bytes) */
+    /* Load the disk's MBR (the first 512 bytes) at 0x7C00 */
     ret = (int) read (guest_fd, &vm_ram[LOAD_ADDR], 512);
     if (ret < 0)
         pexit ("read");
+
+    /* Set Extended BIOS Data Area (EBDA) */
+    off_t disk_size = lseek (guest_fd, 0, SEEK_END);
+    if (disk_size < 0)
+        pexit ("lseek");
+
+    struct hard_disk_parameter *hd = (struct hard_disk_parameter *)
+        (vm_ram + EBDA_ADDR + EBDA_DISK0_OFFSET);
+
+    hd->cyl = (uint16_t) (disk_size / (16 * 63 * 512));
+    hd->head = 16;
+    hd->sectors = 63;
+
+    DEBUG ("disk geometry: CHS = %d / %d / %d\n",
+        hd->cyl, hd->head, hd->sectors);
 
     /**************
      * Run the VM 
@@ -327,11 +332,11 @@ int main (int argc, char **argv)
         switch (kvm_run->exit_reason) {
 
         case KVM_EXIT_HLT:
-            fprintf (stderr, "guest halted\n");
+            handle_exit_hlt (vcpu_fd);
             return 0;
 
         case KVM_EXIT_IO:
-            handle_KVM_EXIT_IO (vcpu_fd, kvm_run);
+            handle_exit_io (vcpu_fd, kvm_run);
             break;
 
         case KVM_EXIT_FAIL_ENTRY:
