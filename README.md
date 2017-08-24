@@ -4,8 +4,8 @@ THAT PROJECT IS IN EARLY DEVELOPMENT PHASE AND DOES NOT WORK
 
 ## Description
 
-Playing with KVM API and trying to implement a tiny Virtual Machine
-Monitor (VMM), in userland, just like Qemu.
+Playing with KVM API and trying to implement a tiny *Virtual Machine
+Monitor (VMM)*, in userland, just like Qemu.
 
 ## Compile
 
@@ -15,7 +15,7 @@ You will need :
   * `nasm`, to compile guest example code
   * `bcc`, aka. *Bruce's C Compiler*, to compile the example BIOS
 
-The command 'make' will compile the project, without launching it :
+The command `make` will compile the project, without launching it :
 
 ```Shell
   gcc -Wall -Wextra -Wconversion -fstack-protector-all -g -c -o build/skvm.o skvm.c 
@@ -36,7 +36,7 @@ and execute :
   make run
 ```
 
-To launch it, you can execute 'make run' or, at command line :
+To launch it, you can execute `make run` or, at command line :
 
 ```Shell
   ./build/skvm --guest build/guest --bios build/minibios
@@ -51,14 +51,14 @@ example :
 
 # Components
 
-We have compiled 3 differents elements :
+The project compile 3 differents elements :
 
-  * 'build/skvm' is the VMM, that uses KVM API and run in Linux user space
-  * 'build/guest' is a tiny guest code, loaded and executed at address 0x7c00 
-  * 'build/minibios' is a tiny BIOS implementation. It's goal is to respond to
+  * `build/skvm` is the VMM, that uses KVM API and run in Linux user space
+  * `build/guest` is a tiny guest code, loaded and executed at address 0x7c00 
+  * `build/minibios` is a tiny BIOS implementation. It's goal is to respond to
     INT instructions executed by the guest code.
 
-Note that 'minibios' only implements BIOS interrupts code (to respond to INT
-instructions). Routines that set Interrupt Vectors Table (IVT), Extended
-Bios Data Area (EBDA) and some other stuffs are managed by the VMM.
+Note that *minibios* only implements BIOS interrupts code (to respond to INT
+instructions). Routines that set *Interrupt Vectors Table (IVT)*, *Extended
+Bios Data Area (EBDA)* and some other stuffs are managed by the VMM.
 
