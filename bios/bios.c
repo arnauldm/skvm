@@ -45,11 +45,18 @@ msg10:
 // to print a BX_PANIC message.  This will normally halt the simulation
 // with a message such as "BIOS panic at bios.c, line 4091".
 #asm
+get_ip:
+    push bp 
+    mov bp, sp
+    mov ax, 2[bp]
+    pop bp
+    ret
+
 MACRO PANIC
     pusha       // AX, CX, DX, BX, orig SP, BP, SI, DI
     pushf 
-    call next   // push IP register on the stack
-next:
+    call get_ip // IP -> AX
+    push ax     // push IP on the stack
     push ss
     push ds
     push es
@@ -70,11 +77,11 @@ next:
     mov ax,#?1
     out dx,ax
 
-    pop ax 
+    pop ax // dummy value
     pop es
     pop ds
     pop ss
-    ret
+    pop ax // dummy value
     popf
     popa
 MEND
@@ -115,11 +122,12 @@ void int13_c_handler (DS, ES, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
   uint16_t DS, ES, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
 {
     switch (GET_AH()) {
+        // INT 13h AH=08h: Read Drive Parameters
+        
+        // INT 13h AH=41h: Check Extensions Present
         case 0x41:
-            serial_print ("INT 13h - 41h: not implemented\n");
-#asm
-            hlt;
-#endasm
+            FLAGS |= 0x0001; // Set CF
+            break;
         default:
 #asm
             PANIC (__LINE__)
