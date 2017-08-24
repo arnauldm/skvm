@@ -311,9 +311,9 @@ int main (int argc, char **argv)
         pexit ("lseek");
 
     struct hard_disk_parameter *hd = (struct hard_disk_parameter *)
-        (vm_ram + EBDA_ADDR + EBDA_DISK0_OFFSET);
+        (vm_ram + EBDA_ADDR + EBDA_DISK1_OFFSET);
 
-    hd->cyl = (uint16_t) (disk_size / (16 * 63 * 512));
+    hd->cyl = (uint16_t) (disk_size / (16 * 63 * 512) + 1);
     hd->head = 16;
     hd->sectors = 63;
 
@@ -332,7 +332,7 @@ int main (int argc, char **argv)
         switch (kvm_run->exit_reason) {
 
         case KVM_EXIT_HLT:
-            handle_exit_hlt (vcpu_fd);
+            handle_exit_hlt ();
             return 0;
 
         case KVM_EXIT_IO:

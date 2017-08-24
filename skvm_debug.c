@@ -56,6 +56,27 @@ void dump_regs (int vcpu_fd)
              regs.rsp, regs.rbp, regs.rip, regs.rflags);
 }
 
+
+void dump_ebda_regs (void)
+{
+    struct ebda_registers *regs = (struct ebda_registers*) 
+        (vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
+
+    fprintf (stderr,
+         "  ax: 0x%x,\tcx: 0x%x\n"
+         "  dx: 0x%x,\tbx: 0x%x\n"
+         "  sp: 0x%x,\tbp: 0x%x\n"
+         "  si: 0x%x,\tdi: 0x%x\n"
+         "  flags: 0x%x,\tip: 0x%x\n"
+         "  cs: 0x%x,\tss: 0x%x\n"
+         "  ds: 0x%x,\tes: 0x%x\n",
+         regs->ax, regs->cx, regs->dx, regs->bx, 
+         regs->sp, regs->bp, regs->si, regs->di,
+         regs->flags, regs->ip, 
+         regs->cs, regs->ss, regs->ds, regs->es);
+}
+
+
 void dump_real_mode_stack (int vcpu_fd)
 {
     struct kvm_regs regs;
@@ -73,7 +94,7 @@ void dump_real_mode_stack (int vcpu_fd)
     addr += ((sregs.ss.selector & 0xffff) << 8);
     addr += (regs.rsp & 0xffff);
 
-    for (int i=0;i<32;i+=2) 
+    for (int i=0;i<64;i+=2) 
         fprintf (stderr, "%p: 0x%x\n", 
             (void*) (&addr[i] - vm_ram), 
             (*(uint16_t*)(addr+i)) & 0xffff);

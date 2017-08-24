@@ -7,7 +7,6 @@
 ;-------------------------------------------
 
 hello:
-
   mov si, msg
 .start:
   lodsb         ; ds:si -> al

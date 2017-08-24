@@ -9,9 +9,14 @@
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
 
-#define PORT_SERIAL 0x3f8
+#define EBDA_SEG    0x9FC0
+#define EBDA_DISK1_OFFSET   0x3D
+#define EBDA_REGS_OFFSET    0x200
 
-#define GET_AL() ( AX & 0x00ff )
+#define SERIAL_PORT 0x3F8
+#define PANIC_PORT  0XDEAD
+
+#define GET_AL() ( AX & 0x00FF )
 #define GET_AH() *(((uint8_t *)&AX)+1)
 
 //---------------------------------------------------------------------------
@@ -34,6 +39,47 @@ msg10:
 #asm
 .org 0x100
 #endasm
+
+// the HALT macro is called with the line number of the HALT call.
+// The line number is then sent to the PANIC_PORT, causing Bochs/Plex
+// to print a BX_PANIC message.  This will normally halt the simulation
+// with a message such as "BIOS panic at bios.c, line 4091".
+#asm
+MACRO PANIC
+    pusha       // AX, CX, DX, BX, orig SP, BP, SI, DI
+    pushf 
+    call next   // push IP register on the stack
+next:
+    push ss
+    push ds
+    push es
+    mov ax, cs
+    push ax
+
+    mov ax, ss          // set ds:si = ss:sp
+    mov ds, ax
+    mov si, sp
+    mov ax, #EBDA_SEG   // set es:di = #EBDA_SEG:#EBDA_REGS_OFFSET
+    mov es, ax
+    mov di, #EBDA_REGS_OFFSET
+    mov cx, #14
+    rep 
+        movsw            // copy ds:si -> es:di
+
+    mov dx,#PANIC_PORT  // "jump" out to the hypervisor
+    mov ax,#?1
+    out dx,ax
+
+    pop ax 
+    pop es
+    pop ds
+    pop ss
+    ret
+    popf
+    popa
+MEND
+#endasm
+
 
 void outb (port, val)
     uint16_t port;
@@ -59,30 +105,26 @@ void serial_print (s)
     uint8_t *s;
 {
     while (*s) {
-        outb (PORT_SERIAL, *s);
+        outb (SERIAL_PORT, *s);
         s++;
     }
 }
 
-void int13_c_handler (DS, ES, DI, SI, BP, temp_SP, BX, DX, CX, AX, FLAGS)
-  uint16_t DS, ES, DI, SI, BP, temp_SP, BX, DX, CX, AX, FLAGS;
-{
-    serial_print ("INT 13h\n");
 
+void int13_c_handler (DS, ES, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
+  uint16_t DS, ES, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
+{
     switch (GET_AH()) {
-        case 0x08:
-            serial_print ("int13_c_handler - service 0x08\n");
-            break;
         case 0x41:
-            serial_print ("int13_c_handler - service 0x41\n");
-            FLAGS |= 0x0001; // Set CF
-            break;
-        default:
-            break;   
-    }
+            serial_print ("INT 13h - 41h: not implemented\n");
 #asm
-    hlt
+            hlt;
 #endasm
+        default:
+#asm
+            PANIC (__LINE__)
+#endasm
+    }
 }
 
 
@@ -117,8 +159,8 @@ int13_handler:
     mov ds, ax 
     pop ax
 
+    pusha // AX, CX, DX, BX, orig_SP, BP, SI, DI
     pushf 
-    pusha // AX, CX, DX, BX, temp, BP, SI, DI
     push es
     push ds
 
@@ -126,8 +168,8 @@ int13_handler:
 
     pop ds
     pop es
-    popa
     popf
+    popa
 
     pop ds
     iret
@@ -146,7 +188,7 @@ int10_handler:
     jnz .error 
 
     push dx 
-    mov dx, #PORT_SERIAL
+    mov dx, #SERIAL_PORT
     out dx, al 
     pop dx 
 

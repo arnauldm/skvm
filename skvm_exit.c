@@ -30,6 +30,10 @@ void handle_exit_io (int vcpu_fd, struct kvm_run *kvm_run)
             handle_exit_io_serial (vcpu_fd, kvm_run);
             break;
 
+        case PANIC_PORT:
+            handle_exit_io_panic (vcpu_fd, kvm_run);
+            break;
+
         default:
             fprintf (stderr, "skvm: unhandled KVM_EXIT_IO (port: 0x%x)\n",
                  kvm_run->io.port);
@@ -40,47 +44,15 @@ void handle_exit_io (int vcpu_fd, struct kvm_run *kvm_run)
     }
 }
 
-void handle_exit_io_bios_int13 (int vcpu_fd, struct kvm_run *kvm_run)
+
+void handle_exit_io_panic (int vcpu_fd, struct kvm_run *kvm_run)
 {
-    struct kvm_regs regs;
-    uint8_t ah;
+    fprintf (stderr, "BIOS panic at bios.c, line %d\n",
+        *((uint16_t*)((char*) kvm_run + kvm_run->io.data_offset)));
 
-    if (ioctl (vcpu_fd, KVM_GET_REGS, &regs) < 0)
-        pexit ("KVM_GET_REGS ioctl");
-
-    ah = (uint8_t) (regs.rax >> 8);
-
-    switch (ah) {
-
-        /* INT 13h AH=08h: Read Drive Parameters */
-        case 0x08:
-            /* Clear CF, no error */
-            regs.rflags &= 0xfffe;
-            /* AL = 00, disk status is 'no error' */
-            regs.rax &= 0xff00;
-            /* DH = heads 
-             * DL = number of drives attached */
-            regs.rdx = 0xff01;
-            /* CX = cylinders [7:6] [15:8], sectors [0:5] */
-            regs.rcx = 0xffff;
-
-            if (ioctl (vcpu_fd, KVM_SET_REGS, &regs) < 0)
-                pexit ("KVM_SET_REGS ioctl");
-            break;
-
-        /* INT 13h AH=41h: Check Extensions Present */
-        case 0x41:
-            regs.rflags |= 0x0001; /* Set CF if not present */
-            if (ioctl (vcpu_fd, KVM_SET_REGS, &regs) < 0)
-                pexit ("KVM_SET_REGS ioctl");
-            break;
-
-        default:
-            fprintf (stderr, "skvm: unhandled INT 13h (port: 0x%x)\n",
-                 kvm_run->io.port);
-            dump_regs (vcpu_fd);
-            exit (1);
-    }
+    dump_ebda_regs ();
+    dump_real_mode_stack (vcpu_fd);
+    exit (1);
 }
 
 
@@ -106,11 +78,9 @@ void handle_exit_io_serial (int vcpu_fd, struct kvm_run *kvm_run)
     }
 }
 
-void handle_exit_hlt (int vcpu_fd)
+
+void handle_exit_hlt (void)
 {
-    dump_regs (vcpu_fd);
-    dump_sregs (vcpu_fd);
-    dump_real_mode_stack (vcpu_fd);
     fprintf (stderr, "Guest halted\n");
     exit (0);
 }

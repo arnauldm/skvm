@@ -25,8 +25,11 @@
 /* EBDA data offsets */
  
 #define EBDA_SIZE_OFFSET	0x00
-#define EBDA_DISK0_OFFSET	0x3D
+#define EBDA_DISK1_OFFSET	0x3D
 #define EBDA_DISK_NUM_OFFSET	0x70
+
+/* Bios can save some registers here before a call to the VMM */
+#define EBDA_REGS_OFFSET	0x200
 
 /* Hard disk drive parameter table */
 
@@ -36,3 +39,23 @@ struct hard_disk_parameter {
     uint8_t unused[11];
     uint8_t sectors; /* Number of sectors per track */
 } __attribute__ ((packed));
+
+/* EBDA saved register structure */
+struct ebda_registers {
+    uint16_t cs;
+    uint16_t es;
+    uint16_t ds;
+    uint16_t ss;
+    uint16_t ip;
+    uint16_t flags;
+    uint16_t di;
+    uint16_t si;
+    uint16_t bp;
+    uint16_t sp;
+    uint16_t bx;
+    uint16_t dx;
+    uint16_t cx;
+    uint16_t ax;
+} __attribute__ ((packed));
+
+
