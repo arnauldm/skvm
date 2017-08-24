@@ -88,7 +88,10 @@ int main (int argc, char **argv)
 
     int ret, i;
 
-    /* Parsing options */
+    /*********************** 
+     * Parsing command line 
+     ***********************/
+
     while (1) {
         static struct option long_options[] = {
             {"bios", required_argument, 0, 'b'},
@@ -240,9 +243,9 @@ int main (int argc, char **argv)
     if (ret < 0)
         pexit ("KVM_SET_REGS ioctl");
 
-    /***************************** 
-     * Set real mode environement 
-     *****************************/
+    /************************ 
+     * Set BIOS environement 
+     ************************/
 
     /* Set the real mode Interrupt Vector Table */
     /* selector, offset, vector */
