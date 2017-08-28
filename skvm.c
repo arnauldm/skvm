@@ -308,7 +308,7 @@ int main (int argc, char **argv)
     if (ret < 0)
         pexit ("read");
 
-    /* Set Extended BIOS Data Area (EBDA) */
+    /* Copy hard disk parameters to the Extended BIOS Data Area (EBDA) */
     off_t disk_size = lseek (guest_fd, 0, SEEK_END);
     if (disk_size < 0)
         pexit ("lseek");
