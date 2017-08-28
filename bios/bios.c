@@ -40,10 +40,13 @@ msg10:
 .org 0x100
 #endasm
 
-// the HALT macro is called with the line number of the HALT call.
-// The line number is then sent to the PANIC_PORT, causing Bochs/Plex
-// to print a BX_PANIC message.  This will normally halt the simulation
-// with a message such as "BIOS panic at bios.c, line 4091".
+// The PANIC macro is called with the line number of the PANIC call.
+// The line number is then sent to the PANIC_PORT, causing skvm to print a
+// message. The PANIC macro copy current registers in the Extended Bios Data
+// Area (EBDA), mapped in 0x9FC00 in physical memory, to transmit them to the
+// skvm VMM. This will normally halt the simulation with a message such as
+// "BIOS panic at bios.c, line 4091".
+
 #asm
 get_ip:
     push bp 
