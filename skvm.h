@@ -6,11 +6,6 @@
 #define RAM_SIZE (32*MBYTE)     /* Memory in bytes */
 #define KVM_FILE "/dev/kvm"     /* KVM special file */
 
-#ifndef __SKVM__
-  extern void pexit (char *);
-  extern char *vm_ram;
-#endif
-
 #define BYTE(x) (x & 0xFF)
 #define HBYTE(x) ((x >> 8) & 0xFF) 
 #define WORD(x) (x & 0xFFFF)
@@ -25,6 +20,14 @@
 #define EBDA_ADDR       0x0009FC00	/* Extended Bios Data Area */
 #define BIOS_ADDR       0x000F0000
 #define PCI_HOLE_ADDR   0xC0000000      /* PCI hole physical address */
+
+/* Real mode interrupt vector table */
+
+struct ivt_entry {
+    uint16_t offset;
+    uint16_t cs;
+} __attribute__ ((packed));
+
 
 /* EBDA data offsets */
  

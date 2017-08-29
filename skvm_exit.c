@@ -16,48 +16,48 @@
 
 
 #define __EXIT_IO__
+#include "skvm.h"
 #include "skvm_exit.h"
 #include "skvm_debug.h"
-#include "skvm.h"
 
 
-void handle_exit_io (int vcpu_fd, struct kvm_run *kvm_run)
+void handle_exit_io (struct vm *guest)
 {
-    switch (kvm_run->io.port) {
+    switch (guest->kvm_run->io.port) {
 
         case SERIAL_PORT:
-            handle_exit_io_serial (vcpu_fd, kvm_run);
+            handle_exit_io_serial (guest);
             break;
 
         case HYPERCALL_PORT:
-            handle_exit_io_hypercall (vcpu_fd, kvm_run);
+            handle_exit_io_hypercall (guest);
             break;
 
         default:
             fprintf (stderr, "skvm: unhandled KVM_EXIT_IO (port: 0x%x)\n",
-                 kvm_run->io.port);
-            dump_regs (vcpu_fd);
-            dump_sregs (vcpu_fd);
-            dump_real_mode_stack (vcpu_fd);
+                 guest->kvm_run->io.port);
+            dump_regs (guest);
+            dump_sregs (guest);
+            dump_real_mode_stack (guest);
             exit (1);
     }
 }
 
 
-void handle_exit_io_hypercall (int vcpu_fd, struct kvm_run *kvm_run)
+void handle_exit_io_hypercall (struct vm *guest)
 {
-    uint8_t data = *((uint8_t *) (kvm_run) + kvm_run->io.data_offset);
+    uint8_t data = *((uint8_t *) (guest->kvm_run) + guest->kvm_run->io.data_offset);
 
     switch (data) {
         case HC_PANIC:
             fprintf (stderr, "BIOS panic\n");
-            dump_ebda_regs ();
-            dump_real_mode_stack (vcpu_fd);
+            dump_ebda_regs (guest);
+            dump_real_mode_stack (guest);
             exit (1);
             break;
 
         case HC_BIOS:
-            handle_bios_interrupt (vcpu_fd);
+            handle_bios_interrupt (guest);
             break;
 
         default:
@@ -67,13 +67,13 @@ void handle_exit_io_hypercall (int vcpu_fd, struct kvm_run *kvm_run)
 }
 
 
-void handle_bios_interrupt (int vcpu_fd)
+void handle_bios_interrupt (struct vm *guest)
 {
-    uint32_t dap_addr, buffer_addr;
+    uint32_t dap_GPA, buffer_GPA; // Guest Physical Address (GPA)
     struct disk_address_packet *dap;
 
     struct ebda_registers *regs = (struct ebda_registers*) 
-        (vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
+        (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
 
     switch (HBYTE(regs->ax)) {
         case 0x41:
@@ -84,28 +84,27 @@ void handle_bios_interrupt (int vcpu_fd)
             break;
 
         case 0x42:
-            dap_addr = ((uint32_t) regs->ds << 4) + (uint32_t) regs->si;
-            dap = (struct disk_address_packet*) (vm_ram + dap_addr);
+            dap_GPA = ((uint32_t) regs->ds << 4) + (uint32_t) regs->si;
+            dap = (struct disk_address_packet*) (guest->vm_ram + dap_GPA);
 
-            buffer_addr = ((dap->buffer >> 12) & 0xFFFF0) + (dap->buffer & 0xFFFF);
+            buffer_GPA = ((dap->buffer >> 12) & 0xFFFF0) + (dap->buffer & 0xFFFF);
 
-            fprintf (stderr, "disk address packet: 0x%x (%x:%x)\n", dap_addr, regs->ds, regs->si);
-            fprintf (stderr, "count: %d, buffer: %x (0x%lx), sector: %ld\n", 
-                dap->count, dap->buffer, buffer_addr, dap->sector);
-
+            fprintf (stderr, "disk address packet: 0x%x (%x:%x)\n", dap_GPA, regs->ds, regs->si);
+            fprintf (stderr, "count: %d, buffer: %x (0x%x), sector: %ld\n", 
+                dap->count, dap->buffer, buffer_GPA, dap->sector);
 
         default:
-            fprintf (stderr, "handle_bios_interrupt: INT %xh not implemented\n", HBYTE(regs->ax));
-            dump_ebda_regs ();
-            dump_real_mode_stack (vcpu_fd);
+            fprintf (stderr, "SKVM: handle_bios_interrupt(): INT %xh not implemented\n", HBYTE(regs->ax));
+            dump_ebda_regs (guest);
+            dump_real_mode_stack (guest);
             exit (1);
     }
 }
 
 
-void handle_exit_io_serial (int vcpu_fd, struct kvm_run *kvm_run)
+void handle_exit_io_serial (struct vm *guest)
 {
-    if (kvm_run->io.direction == KVM_EXIT_IO_OUT) {
+    if (guest->kvm_run->io.direction == KVM_EXIT_IO_OUT) {
 
         /* Linux/Documentation/virtual/kvm/api.txt - 
          * "data_offset describes where the data is located
@@ -114,13 +113,13 @@ void handle_exit_io_serial (int vcpu_fd, struct kvm_run *kvm_run)
          * (KVM_EXIT_IO_IN)" */
 
         write (STDERR_FILENO,
-               (char *) (kvm_run) + kvm_run->io.data_offset,
-               kvm_run->io.size);
+               (char *) (guest->kvm_run) + guest->kvm_run->io.data_offset,
+               guest->kvm_run->io.size);
 
     } else {
         fprintf (stderr, "skvm: unhandled KVM_EXIT_IO (port: 0x%x)\n",
-                 kvm_run->io.port);
-        dump_regs (vcpu_fd);
+                 guest->kvm_run->io.port);
+        dump_regs (guest);
         exit (1);
     }
 }

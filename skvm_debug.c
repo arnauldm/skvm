@@ -14,19 +14,20 @@
 #include <linux/kvm.h>
 #include <x86_64-linux-gnu/asm/kvm.h>
 
+#include "vm.h"
 #include "skvm.h"
+#include "util.h"
 
-extern void pexit (char *);
 
 /* 
  * Dump registers
  */
 
-void dump_sregs (int vcpu_fd)
+void dump_sregs (struct vm *guest)
 {
     struct kvm_sregs sregs;
 
-    if (ioctl (vcpu_fd, KVM_GET_SREGS, &sregs) < 0)
+    if (ioctl (guest->vcpu_fd, KVM_GET_SREGS, &sregs) < 0)
         pexit ("KVM_GET_SREGS ioctl");
 
     fprintf (stderr,
@@ -39,11 +40,11 @@ void dump_sregs (int vcpu_fd)
 }
 
 
-void dump_regs (int vcpu_fd)
+void dump_regs (struct vm *guest)
 {
     struct kvm_regs regs;
 
-    if (ioctl (vcpu_fd, KVM_GET_REGS, &regs) < 0)
+    if (ioctl (guest->vcpu_fd, KVM_GET_REGS, &regs) < 0)
         pexit ("KVM_GET_REGS ioctl");
 
     fprintf (stderr,
@@ -57,10 +58,10 @@ void dump_regs (int vcpu_fd)
 }
 
 
-void dump_ebda_regs (void)
+void dump_ebda_regs (struct vm *guest)
 {
     struct ebda_registers *regs = (struct ebda_registers*) 
-        (vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
+        (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
 
     fprintf (stderr,
          "  ax: 0x%x,\tcx: 0x%x\n"
@@ -77,26 +78,26 @@ void dump_ebda_regs (void)
 }
 
 
-void dump_real_mode_stack (int vcpu_fd)
+void dump_real_mode_stack (struct vm *guest)
 {
     struct kvm_regs regs;
     struct kvm_sregs sregs;
 
     char* addr;
 
-    if (ioctl (vcpu_fd, KVM_GET_REGS, &regs) < 0)
+    if (ioctl (guest->vcpu_fd, KVM_GET_REGS, &regs) < 0)
         pexit ("KVM_GET_REGS ioctl");
 
-    if (ioctl (vcpu_fd, KVM_GET_SREGS, &sregs) < 0)
+    if (ioctl (guest->vcpu_fd, KVM_GET_SREGS, &sregs) < 0)
         pexit ("KVM_GET_SREGS ioctl");
 
-    addr = vm_ram;
+    addr = guest->vm_ram;
     addr += ((sregs.ss.selector & 0xffff) << 8);
     addr += (regs.rsp & 0xffff);
 
     for (int i=0;i<64;i+=2) 
         fprintf (stderr, "%p: 0x%x\n", 
-            (void*) (&addr[i] - vm_ram), 
+            (void*) (&addr[i] - guest->vm_ram), 
             (*(uint16_t*)(addr+i)) & 0xffff);
 
 }
