@@ -61,18 +61,10 @@ struct hard_disk_parameter {
 //---------------------------------------------------------------------------
 #asm
 .org 0x0
-debug:
-    .ascii "minibios: INT ??h is not implemented\n"
-    db 0
-
-opcode:
-    .ascii "minibios: INVALID OPCODE\n"
-    db 0
-
-msg10:
-    .ascii "minibios: INT 10h is not fully implemented\n"
-    db 0
+db 0
 #endasm
+
+
 
 
 #asm
@@ -238,6 +230,19 @@ void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
   uint16_t ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
 {
     switch (GET_AH()) {
+        case 0x00:
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
+            outb (HYPERCALL_PORT, HC_BIOS);
+            AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
+            FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
+            break;
+
+        case 0x08:
+            serial_print ("minibios: INT 13h - AH=08h not implemented\n");
+            #asm
+                hlt
+            #endasm
+            break;
         
         // INT 13h AH=41h: Check extensions present
         //    (http://www.ctyme.com/intr/rb-0706.htm)
@@ -272,7 +277,7 @@ void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
             break;
 
         default:
-            serial_print ("INT 13h - AH value not supported\n");
+            serial_print ("minibios: INT 13h - AH value not supported\n");
             #asm
             HYPERCALL (HC_PANIC)
             #endasm
@@ -280,9 +285,8 @@ void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
 }
 
 
-//---------------------------------------------------------------------------
 #asm
-
+//---------------------------------------------------------------------------
 .org 0x1000 
 debug_handler:
     push ds 
@@ -291,16 +295,35 @@ debug_handler:
     mov ds, ax 
     pop ax
 
-    push #debug
+    push #no_handler
     call _serial_print 
-
-    push dx
-    mov dx, #0xff00 // Special port created on purpose
-    out dx, al 
-    pop dx
+    HYPERCALL (HC_PANIC)
 
     pop ds
     hlt
+
+no_handler:
+    .ascii "minibios: unknown interrupt\n"
+    db 0
+
+//---------------------------------------------------------------------------
+.org 0x1800 
+test_handler:
+    push ds 
+    push ax
+    mov ax, #0xf000
+    mov ds, ax 
+    pop ax
+
+    push #test_msg
+    call _serial_print 
+
+    pop ds
+    hlt
+
+test_msg:
+    .ascii "minibios: I was here !\n"
+    db 0
 
 //---------------------------------------------------------------------------
 .org 0x2000 
@@ -311,11 +334,16 @@ int06_handler:
     mov ds, ax 
     pop ax
 
-    push #opcode
+    push #exc_opcode
     call _serial_print 
 
     pop ds
     hlt
+
+exc_opcode:
+    .ascii "minibios: INVALID OPCODE\n"
+    db 0
+
 //---------------------------------------------------------------------------
 .org 0xe000 
 int13_handler:
@@ -366,5 +394,10 @@ int10_handler:
     push #msg10
     call _serial_print
     hlt 
+
+msg10:
+    .ascii "minibios: INT 10h is not fully implemented\n"
+    db 0
+
 #endasm
 

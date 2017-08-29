@@ -17,6 +17,7 @@
 
 #define __EXIT_IO__
 #include "vm.h"
+#include "util.h"
 #include "skvm.h"
 #include "skvm_exit.h"
 #include "skvm_debug.h"
@@ -35,7 +36,7 @@ void handle_exit_io (struct vm *guest)
             break;
 
         default:
-            fprintf (stderr, "skvm: unhandled KVM_EXIT_IO (port: 0x%x)\n",
+            fprintf (stderr, "unhandled KVM_EXIT_IO (port: 0x%x)\n",
                  guest->kvm_run->io.port);
             dump_regs (guest);
             dump_sregs (guest);
@@ -55,7 +56,6 @@ void handle_exit_io_hypercall (struct vm *guest)
             dump_ebda_regs (guest);
             dump_real_mode_stack (guest);
             exit (1);
-            break;
 
         case HC_BIOS:
             handle_bios_interrupt (guest);
@@ -78,14 +78,26 @@ void handle_bios_interrupt (struct vm *guest)
         (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
 
     switch (HBYTE(regs->ax)) {
-        case 0x41:
+        case 0x00:
+            fprintf (stderr, "int 13h, ah=00h\n");
             regs->flags &= 0xFFFE; // Clear CF
             regs->ax &= 0x00FF; // AH = 0x00
+            break;
+
+        case 0x41:
+            fprintf (stderr, "int 13h, ah=41h\n");
+            regs->flags &= 0xFFFE; // Clear CF
+            regs->ax &= 0x00FF; // AH = 00h
             regs->bx = 0xAA55;
-            regs->cx = 0x0001;
+            regs->cx = 0x0001; // extended disk access functions (AH=42h-44h,47h,48h) supported
+
+            // Status of last hard disk drive operation = OK
+            *((uint8_t*)GPA_to_HVA(guest, BDA_ADDR + 0x74)) = 0x00; 
+
             break;
 
         case 0x42:
+            fprintf (stderr, "int 13h, ah=42h\n");
             dap_GPA = ((uint32_t) regs->ds << 4) + (uint32_t) regs->si;
             dap = (struct disk_address_packet*) (guest->vm_ram + dap_GPA);
 
@@ -102,10 +114,13 @@ void handle_bios_interrupt (struct vm *guest)
             regs->flags &= 0xFFFE; // Clear CF
             regs->ax &= 0x00FF; // AH = 0x00
 
+            // Status of last hard disk drive operation = OK
+            *((uint8_t*)GPA_to_HVA(guest, BDA_ADDR + 0x74)) = 0x00; 
+
             break;
 
         default:
-            fprintf (stderr, "SKVM: handle_bios_interrupt(): INT %xh not implemented\n", HBYTE(regs->ax));
+            fprintf (stderr, "handle_bios_interrupt(): INT %xh not implemented\n", HBYTE(regs->ax));
             dump_ebda_regs (guest);
             dump_real_mode_stack (guest);
             exit (1);
@@ -128,7 +143,7 @@ void handle_exit_io_serial (struct vm *guest)
                guest->kvm_run->io.size);
 
     } else {
-        fprintf (stderr, "skvm: unhandled KVM_EXIT_IO (port: 0x%x)\n",
+        fprintf (stderr, "unhandled KVM_EXIT_IO (port: 0x%x)\n",
                  guest->kvm_run->io.port);
         dump_regs (guest);
         exit (1);
