@@ -25,7 +25,7 @@ $(GUEST): guest16.asm
 
 $(BIOS): bios/bios.c
 	bcc -W -0 -S -o $(BUILD)/bios.s $^
-	as86 -b $@ $(BUILD)/bios.s
+	as86 -j -b $@ $(BUILD)/bios.s
 
 indent:
 	indent -kr -nut -pcs *.c 

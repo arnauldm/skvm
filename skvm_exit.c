@@ -25,13 +25,12 @@ void handle_exit_io (int vcpu_fd, struct kvm_run *kvm_run)
 {
     switch (kvm_run->io.port) {
 
-        /* default serial port COM0 */
-        case 0x3f8:
+        case SERIAL_PORT:
             handle_exit_io_serial (vcpu_fd, kvm_run);
             break;
 
-        case PANIC_PORT:
-            handle_exit_io_panic (vcpu_fd, kvm_run);
+        case HYPERCALL_PORT:
+            handle_exit_io_hypercall (vcpu_fd, kvm_run);
             break;
 
         default:
@@ -45,14 +44,62 @@ void handle_exit_io (int vcpu_fd, struct kvm_run *kvm_run)
 }
 
 
-void handle_exit_io_panic (int vcpu_fd, struct kvm_run *kvm_run)
+void handle_exit_io_hypercall (int vcpu_fd, struct kvm_run *kvm_run)
 {
-    fprintf (stderr, "BIOS panic at bios.c, line %d\n",
-        *((uint16_t*)((char*) kvm_run + kvm_run->io.data_offset)));
+    uint8_t data = *((uint8_t *) (kvm_run) + kvm_run->io.data_offset);
 
-    dump_ebda_regs ();
-    dump_real_mode_stack (vcpu_fd);
-    exit (1);
+    switch (data) {
+        case HC_PANIC:
+            fprintf (stderr, "BIOS panic\n");
+            dump_ebda_regs ();
+            dump_real_mode_stack (vcpu_fd);
+            exit (1);
+            break;
+
+        case HC_BIOS:
+            handle_bios_interrupt (vcpu_fd);
+            break;
+
+        default:
+            fprintf (stderr, "HYPERCALL not implemented (0x%x)\n", data);
+    }
+
+}
+
+
+void handle_bios_interrupt (int vcpu_fd)
+{
+    uint32_t dap_addr, buffer_addr;
+    struct disk_address_packet *dap;
+
+    struct ebda_registers *regs = (struct ebda_registers*) 
+        (vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
+
+    switch (HBYTE(regs->ax)) {
+        case 0x41:
+            regs->flags &= 0xFFFE; // Clear CF
+            regs->ax &= 0x00FF; // AH = 0x00
+            regs->bx = 0xAA55;
+            regs->cx = 0x0001;
+            break;
+
+        case 0x42:
+            dap_addr = ((uint32_t) regs->ds << 4) + (uint32_t) regs->si;
+            dap = (struct disk_address_packet*) (vm_ram + dap_addr);
+
+            buffer_addr = ((dap->buffer >> 12) & 0xFFFF0) + (dap->buffer & 0xFFFF);
+
+            fprintf (stderr, "disk address packet: 0x%x (%x:%x)\n", dap_addr, regs->ds, regs->si);
+            fprintf (stderr, "count: %d, buffer: %x (0x%lx), sector: %ld\n", 
+                dap->count, dap->buffer, buffer_addr, dap->sector);
+
+
+        default:
+            fprintf (stderr, "handle_bios_interrupt: INT %xh not implemented\n", HBYTE(regs->ax));
+            dump_ebda_regs ();
+            dump_real_mode_stack (vcpu_fd);
+            exit (1);
+    }
 }
 
 

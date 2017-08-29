@@ -6,6 +6,11 @@
 ; Guest code call the BIOS INT 10h routine
 ;-------------------------------------------
 
+_start:
+  xor ax, ax
+  mov ss, ax
+  mov sp, 0x2000
+
 hello:
   mov si, msg
 .start:
@@ -16,7 +21,6 @@ hello:
   mov bx, 0x07  ; bx -> attribut 
   int 0x10
   jmp .start
-
 .end:
   hlt
 

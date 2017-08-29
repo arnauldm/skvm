@@ -12,17 +12,56 @@ typedef unsigned short uint16_t;
 #define EBDA_SEG    0x9FC0
 #define EBDA_DISK1_OFFSET   0x3D
 #define EBDA_REGS_OFFSET    0x200
+#define EBDA_REGS_CS    0
+#define EBDA_REGS_ES    2
+#define EBDA_REGS_DS    4
+#define EBDA_REGS_SS    6
+#define EBDA_REGS_IP    8
+#define EBDA_REGS_FLAGS 10
+#define EBDA_REGS_DI    12
+#define EBDA_REGS_SI    14
+#define EBDA_REGS_BP    16
+#define EBDA_REGS_SP    18
+#define EBDA_REGS_BX    20
+#define EBDA_REGS_DX    22
+#define EBDA_REGS_CX    24
+#define EBDA_REGS_AX    26
 
 #define SERIAL_PORT 0x3F8
-#define PANIC_PORT  0XDEAD
+#define HYPERCALL_PORT  0XCAFE
+#define HC_PANIC 0x01
+#define HC_BIOS 0x02
 
-#define GET_AL() ( AX & 0x00FF )
+#define SET_AL(val8) *((uint8_t *)&AX) = (val8)
+#define SET_BL(val8) *((uint8_t *)&BX) = (val8)
+#define SET_CL(val8) *((uint8_t *)&CX) = (val8)
+#define SET_DL(val8) *((uint8_t *)&DX) = (val8)
+#define SET_AH(val8) *(((uint8_t *)&AX)+1) = (val8)
+#define SET_BH(val8) *(((uint8_t *)&BX)+1) = (val8)
+#define SET_CH(val8) *(((uint8_t *)&CX)+1) = (val8)
+#define SET_DH(val8) *(((uint8_t *)&DX)+1) = (val8)
+
+#define GET_AL() ( AX & 0x00ff )
+#define GET_BL() ( BX & 0x00ff )
+#define GET_CL() ( CX & 0x00ff )
+#define GET_DL() ( DX & 0x00ff )
 #define GET_AH() *(((uint8_t *)&AX)+1)
+#define GET_BH() *(((uint8_t *)&BX)+1)
+#define GET_CH() *(((uint8_t *)&CX)+1)
+#define GET_DH() *(((uint8_t *)&DX)+1)
+
+struct hard_disk_parameter {
+    uint16_t cyl;    /* Number of cylinders */
+    uint8_t head;    /* Number of heads */
+    uint8_t unused[11];
+    uint8_t sectors; /* Number of sectors per track */
+};
+
 
 //---------------------------------------------------------------------------
 #asm
 .org 0x0
-msg:
+debug:
     .ascii "minibios: INT ??h is not implemented\n"
     db 0
 
@@ -40,12 +79,9 @@ msg10:
 .org 0x100
 #endasm
 
-// The PANIC macro is called with the line number of the PANIC call.
-// The line number is then sent to the PANIC_PORT, causing skvm to print a
-// message. The PANIC macro copy current registers in the Extended Bios Data
+// The HYPERCALL macro copy current registers in the Extended Bios Data
 // Area (EBDA), mapped in 0x9FC00 in physical memory, to transmit them to the
-// skvm VMM. This will normally halt the simulation with a message such as
-// "BIOS panic at bios.c, line 4091".
+// skvm VMM. 
 
 #asm
 get_ip:
@@ -55,7 +91,7 @@ get_ip:
     pop bp
     ret
 
-MACRO PANIC
+MACRO HYPERCALL
     pusha       // AX, CX, DX, BX, orig SP, BP, SI, DI
     pushf 
     call get_ip // IP -> AX
@@ -76,8 +112,8 @@ MACRO PANIC
     rep 
         movsw            // copy ds:si -> es:di
 
-    mov dx,#PANIC_PORT  // "jump" out to the hypervisor
-    mov ax,#?1
+    mov dx,#HYPERCALL_PORT  // "jump" out to the hypervisor
+    mov ax,#?1          // requested service
     out dx,ax
 
     pop ax // dummy value
@@ -89,6 +125,82 @@ MACRO PANIC
     popa
 MEND
 #endasm
+
+
+void writeb (segment, offset, value)
+    uint16_t segment, offset;
+    uint8_t value;
+{
+#asm
+    push bp
+    mov  bp, sp
+
+    push ax
+    push bx
+    push ds
+
+    mov ax, 4[bp] // segment
+    mov ds, ax
+    mov bx, 6[bp] // offset
+    mov al, 8[bp] // value
+    mov [bx], al
+    
+    pop ds
+    pop bx
+    pop ax
+
+    pop bp
+#endasm
+}
+
+
+void writew (segment, offset, value)
+    uint16_t segment, offset, value;
+{
+#asm
+    push bp
+    mov  bp, sp
+
+    push ax
+    push bx
+    push ds
+
+    mov ax, 4[bp] // segment
+    mov ds, ax
+    mov bx, 6[bp] // offset
+    mov ax, 8[bp] // value
+    mov [bx], ax
+    
+    pop ds
+    pop bx
+    pop ax
+
+    pop bp
+#endasm
+}
+
+
+uint16_t readw (segment, offset)
+    uint16_t segment, offset;
+{
+#asm
+    push bp
+    mov  bp, sp
+
+    push bx
+    push ds
+
+    mov ax, 4[bp] // segment
+    mov ds, ax
+    mov bx, 6[bp] // offset
+    mov ax, [bx]
+
+    pop ds
+    pop bx
+
+    pop bp
+#endasm
+}
 
 
 void outb (port, val)
@@ -111,6 +223,7 @@ void outb (port, val)
 #endasm
 }
 
+
 void serial_print (s)
     uint8_t *s;
 {
@@ -121,20 +234,45 @@ void serial_print (s)
 }
 
 
-void int13_c_handler (DS, ES, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
-  uint16_t DS, ES, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
+void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
+  uint16_t ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
 {
     switch (GET_AH()) {
-        // INT 13h AH=08h: Read Drive Parameters
         
-        // INT 13h AH=41h: Check Extensions Present
+        // INT 13h AH=41h: Check extensions present
+        //    (http://www.ctyme.com/intr/rb-0706.htm)
         case 0x41:
-            FLAGS |= 0x0001; // Set CF
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
+            outb (HYPERCALL_PORT, HC_BIOS);
+
+            AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
+            BX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX);
+            CX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX);
+            FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
+
             break;
+
+        // INT 13h AH=42h: Extended read
+        //    (http://www.ctyme.com/intr/rb-0708.htm)
+        // result: 
+        //    CF clear if successful
+        //    AH = 00h if successful or error code
+        //    disk address packet's block count field set to number of blocks
+        //    successfully transferred
+        case 0x42:
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX, DX);
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DS, DS);
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
+            outb (HYPERCALL_PORT, HC_BIOS);
+
+            break;
+
         default:
-#asm
-            PANIC (__LINE__)
-#endasm
+            serial_print ("INT 13h - AH value not supported\n");
+            #asm
+            HYPERCALL (HC_PANIC)
+            #endasm
     }
 }
 
@@ -150,7 +288,7 @@ debug_handler:
     mov ds, ax 
     pop ax
 
-    push #opcode
+    push #debug
     call _serial_print 
 
     push dx
@@ -162,38 +300,54 @@ debug_handler:
     hlt
 
 //---------------------------------------------------------------------------
-.org 0xe000 
-int13_handler:
-    push ds
+.org 0x2000 
+int06_handler:
+    push ds 
     push ax
-    mov ax, #0xf000 
+    mov ax, #0xf000
     mov ds, ax 
     pop ax
 
+    push #opcode
+    call _serial_print 
+
+    pop ds
+    hlt
+//---------------------------------------------------------------------------
+.org 0xe000 
+int13_handler:
+    push ds
+
+    // Set function parameters
     pusha // AX, CX, DX, BX, orig_SP, BP, SI, DI
     pushf 
-    push es
     push ds
+    push es
+
+    // We set DS here not to overlap the 'DS' parameter passed to the
+    // _int13_c_handler
+    push #0xf000
+    pop ds
 
     call _int13_c_handler
 
-    pop ds
     pop es
+    pop ds
     popf
     popa
 
     pop ds
+.end:
     iret
 
 //---------------------------------------------------------------------------
 .org 0xf000 // INT 10 h Video Support Service Entry Point 
 int10_handler:
-    // set DS
+    // Set DS
     push ds
-    push ax
-    mov ax, #0xf000 
-    mov ds, ax 
-    pop ax
+
+    push #0xf000
+    pop ds
 
     cmp ah, #0x0e
     jnz .error 

@@ -11,6 +11,10 @@
   extern char *vm_ram;
 #endif
 
+#define BYTE(x) (x & 0xFF)
+#define HBYTE(x) ((x >> 8) & 0xFF) 
+#define WORD(x) (x & 0xFFFF)
+
 /********************
  * BIOS environment *
  ********************/

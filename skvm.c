@@ -236,8 +236,8 @@ int main (int argc, char **argv)
         pexit ("KVM_GET_REGS ioctl");
 
     regs.rip = LOAD_ADDR;
-    regs.rflags = 2;            /* bit 1 is reserved and must be set */
-    regs.rdx = 0x80;            /* DL = 80h - 1st hard disk */
+    regs.rflags = 0x0002;            /* bit 1 is reserved and must be set */
+    regs.rdx = 0x0080;            /* DL = 80h - 1st hard disk */
 
     ret = ioctl (vcpu_fd, KVM_SET_REGS, &regs);
     if (ret < 0)
@@ -255,7 +255,7 @@ int main (int argc, char **argv)
     set_ivt (0xf000, 0x1000, 0x03);     /* ? */
     set_ivt (0xf000, 0x1000, 0x04);     /* ? */
     set_ivt (0xf000, 0x1000, 0x05);     /* ? */
-    set_ivt (0xf000, 0x1000, 0x06);     /* Invalid opcode */
+    set_ivt (0xf000, 0x2000, 0x06);     /* Invalid opcode */
     set_ivt (0xf000, 0x1000, 0x07);     /* ? */
     set_ivt (0xf000, 0x1000, 0x08);     /* System timer */
     set_ivt (0xf000, 0x1000, 0x09);     /* Keyboard */
@@ -308,20 +308,23 @@ int main (int argc, char **argv)
     if (ret < 0)
         pexit ("read");
 
-    /* Copy hard disk parameters to the Extended BIOS Data Area (EBDA) */
-    off_t disk_size = lseek (guest_fd, 0, SEEK_END);
-    if (disk_size < 0)
-        pexit ("lseek");
-
-    struct hard_disk_parameter *hd = (struct hard_disk_parameter *)
-        (vm_ram + EBDA_ADDR + EBDA_DISK1_OFFSET);
-
-    hd->cyl = (uint16_t) (disk_size / (16 * 63 * 512) + 1);
-    hd->head = 16;
-    hd->sectors = 63;
-
-    DEBUG ("disk geometry: CHS = %d / %d / %d\n",
-        hd->cyl, hd->head, hd->sectors);
+//    /* Copy hard disk parameters to the Extended BIOS Data Area (EBDA) */
+//    off_t disk_size = lseek (guest_fd, 0, SEEK_END);
+//    if (disk_size < 0)
+//        pexit ("lseek");
+//
+//    struct hard_disk_parameter *hd = (struct hard_disk_parameter *)
+//        (vm_ram + EBDA_ADDR + EBDA_DISK1_OFFSET);
+//
+//    hd->head = 255;
+//    hd->sectors = 63;
+//    hd->cyl = (uint16_t) ((disk_size / (hd->head * hd->sectors * 512)) + 1);
+//
+//    if (hd->cyl > 1023)
+//        pexit ("disk too big");
+//
+//    DEBUG ("disk geometry: CHS = %d / %d / %d\n",
+//        hd->cyl, hd->head, hd->sectors);
 
     /**************
      * Run the VM 
