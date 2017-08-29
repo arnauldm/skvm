@@ -16,6 +16,7 @@
 
 
 #define __EXIT_IO__
+#include "vm.h"
 #include "skvm.h"
 #include "skvm_exit.h"
 #include "skvm_debug.h"
@@ -71,6 +72,7 @@ void handle_bios_interrupt (struct vm *guest)
 {
     uint32_t dap_GPA, buffer_GPA; // Guest Physical Address (GPA)
     struct disk_address_packet *dap;
+    int ret;
 
     struct ebda_registers *regs = (struct ebda_registers*) 
         (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
@@ -92,6 +94,15 @@ void handle_bios_interrupt (struct vm *guest)
             fprintf (stderr, "disk address packet: 0x%x (%x:%x)\n", dap_GPA, regs->ds, regs->si);
             fprintf (stderr, "count: %d, buffer: %x (0x%x), sector: %ld\n", 
                 dap->count, dap->buffer, buffer_GPA, dap->sector);
+
+            ret = disk_read (guest, GPA_to_HVA(guest, buffer_GPA), dap->sector, dap->count);
+            if (ret < 0) 
+                pexit ("disk_read()");
+
+            regs->flags &= 0xFFFE; // Clear CF
+            regs->ax &= 0x00FF; // AH = 0x00
+
+            break;
 
         default:
             fprintf (stderr, "SKVM: handle_bios_interrupt(): INT %xh not implemented\n", HBYTE(regs->ax));

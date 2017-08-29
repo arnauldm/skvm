@@ -23,21 +23,6 @@
 
 
 
-/* Guest physical address (GPA) to host virtual address (HVA) */
-void *GPA_to_HVA (struct vm *guest, uint64_t offset)
-{
-    return guest->vm_ram + offset;
-}
-
-/* Setting Interrupt Vector Table (IVT) entry */
-void set_ivt (struct vm *guest, uint16_t cs, uint16_t offset, uint16_t vector)
-{
-    struct ivt_entry *ivt = (struct ivt_entry *) GPA_to_HVA (guest, 0);
-    ivt[vector].cs = cs;
-    ivt[vector].offset = offset;
-}
-
-
 int main (int argc, char **argv)
 {
     struct vm guest;
@@ -280,7 +265,7 @@ int main (int argc, char **argv)
         pexit (guest_file);
 
     /* Load the disk's MBR (the first 512 bytes) at 0x7C00 */
-    ret = (int) read (guest.disk_fd, &guest.vm_ram[LOAD_ADDR], 512);
+    ret = disk_read (&guest, GPA_to_HVA(&guest, LOAD_ADDR), 0, 1);
     if (ret < 0)
         pexit ("read");
 

@@ -266,6 +266,9 @@ void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
             writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
             outb (HYPERCALL_PORT, HC_BIOS);
 
+            AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
+            FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
+            
             break;
 
         default:

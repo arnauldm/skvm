@@ -14,7 +14,7 @@ all: $(BUILD) $(BIN) $(GUEST) $(BIOS)
 $(BUILD):
 	mkdir $@
 
-$(BIN): $(BUILD)/skvm.o $(BUILD)/skvm_exit.o $(BUILD)/skvm_debug.o $(BUILD)/util.o
+$(BIN): $(BUILD)/skvm.o $(BUILD)/skvm_exit.o $(BUILD)/skvm_debug.o $(BUILD)/util.o $(BUILD)/vm.o
 	$(GCC) -o $@ $^
 
 $(BUILD)/%.o: %.c

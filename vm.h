@@ -1,8 +1,10 @@
+#include <stdint.h>
+
 #include <linux/kvm.h>
 #include <x86_64-linux-gnu/asm/kvm.h>
 
-#ifndef _VM_
-#define _VM_
+#ifndef _STRUCT_VM_
+#define _STRUCT_VM_
 
 /* VM */
 struct vm {
@@ -14,4 +16,11 @@ struct vm {
     struct kvm_run *kvm_run; /* Used by KVM to communicate with the application level code */
 };
 
+#endif
+
+
+#ifndef _VM_
+extern void *GPA_to_HVA (struct vm *, uint64_t);
+extern void set_ivt (struct vm *, uint16_t , uint16_t , uint16_t );
+extern int disk_read (struct vm *, char *, size_t , size_t );
 #endif
