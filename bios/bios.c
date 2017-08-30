@@ -29,8 +29,9 @@ typedef unsigned short uint16_t;
 
 #define SERIAL_PORT 0x3F8
 #define HYPERCALL_PORT  0XCAFE
-#define HC_PANIC 0x01
-#define HC_BIOS 0x02
+#define HC_BIOS_INT13 0x13
+#define HC_BIOS_INT15 0x15
+#define HC_PANIC 0xFF
 
 #define SET_AL(val8) *((uint8_t *)&AX) = (val8)
 #define SET_BL(val8) *((uint8_t *)&BX) = (val8)
@@ -252,7 +253,7 @@ void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
     switch (GET_AH()) {
         case 0x00:
             writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
-            outb (HYPERCALL_PORT, HC_BIOS);
+            outb (HYPERCALL_PORT, HC_BIOS_INT13);
             AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
             FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
             break;
@@ -268,7 +269,7 @@ void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
         //    (http://www.ctyme.com/intr/rb-0706.htm)
         case 0x41:
             writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
-            outb (HYPERCALL_PORT, HC_BIOS);
+            outb (HYPERCALL_PORT, HC_BIOS_INT13);
 
             AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
             BX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX);
@@ -289,13 +290,12 @@ void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
             writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX, DX);
             writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DS, DS);
             writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
-            outb (HYPERCALL_PORT, HC_BIOS);
+            outb (HYPERCALL_PORT, HC_BIOS_INT13);
 
             AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
             FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
             
-            break;
-
+            break; 
         default:
             serial_print ("minibios: INT 13h - AH value not supported\n");
             #asm
@@ -305,7 +305,34 @@ void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
 }
 
 
+void int15_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
+  uint16_t ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
+{
+    switch (AX) {
+        // INT 15h, AX=E820h - Query System Address Map
+        case 0xE820:
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX, BX);
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX, CX);
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX, DX);
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_ES, ES);
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
+            outb (HYPERCALL_PORT, HC_BIOS_INT15);
+            #asm
+            hlt
+            #endasm
+            break;
+
+        default:
+            serial_print ("minibios: INT 15h - AH value not supported\n");
+            #asm
+            HYPERCALL (HC_PANIC)
+            #endasm
+    }
+}
+
 #asm
+
 //---------------------------------------------------------------------------
 .org 0x1000 
 debug_handler:
@@ -369,6 +396,33 @@ exc_opcode:
     .ascii "minibios: INVALID OPCODE\n"
     db 0
 
+
+//---------------------------------------------------------------------------
+.org 0x3000 
+int15_handler:
+    push ds 
+
+    // Set function parameters
+    pusha // AX, CX, DX, BX, orig_SP, BP, SI, DI
+    pushf 
+    push ds
+    push es
+
+    // We set DS here not to overlap the 'DS' parameter passed to the
+    // _int15_c_handler
+    push #0xf000
+    pop ds
+
+    call _int15_c_handler
+
+    pop es
+    pop ds
+    popf
+    popa
+
+    pop ds
+    iret
+
 //---------------------------------------------------------------------------
 .org 0xe000 
 int13_handler:
@@ -393,7 +447,6 @@ int13_handler:
     popa
 
     pop ds
-.end:
     iret
 
 //---------------------------------------------------------------------------

@@ -2,14 +2,16 @@
 
 #define SERIAL_PORT 0x3F8
 #define HYPERCALL_PORT  0XCAFE
-#define HC_PANIC 0x01
-#define HC_BIOS 0x02
+#define HC_BIOS_INT13 0x13
+#define HC_BIOS_INT15 0x15
+#define HC_PANIC 0xFF
 
 #ifdef __EXIT_IO__
   void handle_exit_io (struct vm*);
   void handle_exit_io_hypercall (struct vm*);
   void handle_exit_io_serial (struct vm*);
-  void handle_bios_interrupt (struct vm*);
+  void handle_bios_int13 (struct vm*);
+  void handle_bios_int15 (struct vm*);
 #else
   extern void handle_exit_io (struct vm*);
   extern void handle_exit_hlt (void);

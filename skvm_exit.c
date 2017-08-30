@@ -57,8 +57,12 @@ void handle_exit_io_hypercall (struct vm *guest)
             dump_real_mode_stack (guest);
             exit (1);
 
-        case HC_BIOS:
-            handle_bios_interrupt (guest);
+        case HC_BIOS_INT13:
+            handle_bios_int13 (guest);
+            break;
+
+        case HC_BIOS_INT15:
+            handle_bios_int15 (guest);
             break;
 
         default:
@@ -68,7 +72,7 @@ void handle_exit_io_hypercall (struct vm *guest)
 }
 
 
-void handle_bios_interrupt (struct vm *guest)
+void handle_bios_int13 (struct vm *guest)
 {
     uint32_t dap_GPA, buffer_GPA; // Guest Physical Address (GPA)
     struct disk_address_packet *dap;
@@ -120,11 +124,21 @@ void handle_bios_interrupt (struct vm *guest)
             break;
 
         default:
-            fprintf (stderr, "handle_bios_interrupt(): INT %xh not implemented\n", HBYTE(regs->ax));
+            fprintf (stderr, "handle_bios_int13(): AH=%Xh not implemented\n", HBYTE(regs->ax));
             dump_ebda_regs (guest);
             dump_real_mode_stack (guest);
             exit (1);
     }
+}
+
+
+void handle_bios_int15 (struct vm *guest)
+{
+    struct ebda_registers *regs = (struct ebda_registers*) 
+        (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
+    fprintf (stderr, "handle_bios_int15(): AH=%Xh not implemented\n", HBYTE(regs->ax));
+    dump_ebda_regs (guest);
+    exit (1);
 }
 
 
