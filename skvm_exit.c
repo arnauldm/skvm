@@ -57,6 +57,10 @@ void handle_exit_io_hypercall (struct vm *guest)
             dump_real_mode_stack (guest);
             exit (1);
 
+        case HC_BIOS_INT10:
+            handle_bios_int10 (guest);
+            break;
+
         case HC_BIOS_INT13:
             handle_bios_int13 (guest);
             break;
@@ -69,6 +73,23 @@ void handle_exit_io_hypercall (struct vm *guest)
             fprintf (stderr, "HYPERCALL not implemented (0x%x)\n", data);
     }
 
+}
+
+
+void handle_bios_int10 (struct vm *guest)
+{
+    struct ebda_registers *regs = (struct ebda_registers*) 
+        (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
+
+    switch (HBYTE(regs->ax)) {
+        case 0x0E:
+            putchar (BYTE(regs->ax));
+            break;
+        default:
+            fprintf (stderr, "handle_bios_int10(): AH=%Xh not implemented\n", HBYTE(regs->ax));
+            dump_ebda_regs (guest);
+            exit (1);
+    }
 }
 
 

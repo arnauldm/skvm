@@ -29,6 +29,7 @@ typedef unsigned short uint16_t;
 
 #define SERIAL_PORT 0x3F8
 #define HYPERCALL_PORT  0XCAFE
+#define HC_BIOS_INT10 0x10
 #define HC_BIOS_INT13 0x13
 #define HC_BIOS_INT15 0x15
 #define HC_PANIC 0xFF
@@ -247,6 +248,26 @@ void serial_print (s)
 }
 
 
+void int10_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
+  uint16_t ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
+{
+    switch (GET_AH()) {
+        // INT 10h, AH=OEh - Video teletype output
+        // (http://www.ctyme.com/intr/rb-0106.htm)
+        case 0x0E:
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
+            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX, BX);
+            outb (HYPERCALL_PORT, HC_BIOS_INT10);
+            break;
+        default:
+            serial_print ("minibios: INT 10h - AH value not supported\n");
+            #asm
+            HYPERCALL (HC_PANIC)
+            #endasm
+    }
+}
+
+
 void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
   uint16_t ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
 {
@@ -455,27 +476,26 @@ int10_handler:
     // Set DS
     push ds
 
+    // Set function parameters
+    pusha // AX, CX, DX, BX, orig_SP, BP, SI, DI
+    pushf 
+    push ds
+    push es
+
+    // We set DS here not to overlap the 'DS' parameter passed to the
+    // _int15_c_handler
     push #0xf000
     pop ds
 
-    cmp ah, #0x0e
-    jnz .error 
+    call _int10_c_handler
 
-    push dx 
-    mov dx, #SERIAL_PORT
-    out dx, al 
-    pop dx 
+    pop es
+    pop ds
+    popf
+    popa
 
     pop ds
     iret
-.error:
-    push #msg10
-    call _serial_print
-    hlt 
-
-msg10:
-    .ascii "minibios: INT 10h is not fully implemented\n"
-    db 0
 
 #endasm
 
