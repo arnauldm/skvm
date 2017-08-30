@@ -219,10 +219,30 @@ void outb (port, val)
 void serial_print (s)
     uint8_t *s;
 {
-    while (*s) {
-        outb (SERIAL_PORT, *s);
-        s++;
-    }
+#asm
+    push bp
+    mov  bp, sp
+
+    push ax
+    push dx
+    push si
+
+    mov dx, #SERIAL_PORT
+    mov si, 4[bp]   // pointer to the string
+.out_start:
+    lodsb   // ds:si -> al
+    cmp al, #0
+    jz .out_end
+    out dx, al
+    jmp .out_start
+.out_end:
+
+    pop si
+    pop dx
+    pop ax
+
+    pop bp
+#endasm
 }
 
 
@@ -290,15 +310,16 @@ void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
 .org 0x1000 
 debug_handler:
     push ds 
-    push ax
-    mov ax, #0xf000
-    mov ds, ax 
-    pop ax
+
+    push #0xf000
+    pop ds
 
     push #no_handler
     call _serial_print 
+
     HYPERCALL (HC_PANIC)
 
+    pop ds // dummy
     pop ds
     hlt
 
@@ -310,14 +331,18 @@ no_handler:
 .org 0x1800 
 test_handler:
     push ds 
-    push ax
-    mov ax, #0xf000
-    mov ds, ax 
-    pop ax
 
+    push #0xf000
+    pop ds
+
+    push ax
     push #test_msg
     call _serial_print 
+    pop ax
+    pop ax
+    HYPERCALL (HC_PANIC)
 
+    pop ds // dummy
     pop ds
     hlt
 
@@ -329,14 +354,14 @@ test_msg:
 .org 0x2000 
 int06_handler:
     push ds 
-    push ax
-    mov ax, #0xf000
-    mov ds, ax 
-    pop ax
+
+    push #0xf000
+    pop ds
 
     push #exc_opcode
     call _serial_print 
 
+    pop ds // dummy
     pop ds
     hlt
 

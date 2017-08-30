@@ -235,7 +235,7 @@ int main (int argc, char **argv)
     set_ivt (&guest, 0xf000, 0xe000, 0x13);     /* disk */
 
     set_ivt (&guest, 0xf000, 0x1000, 0x14);     /* Serial communication */
-    set_ivt (&guest, 0xf000, 0x1000, 0x15);     /* System services */
+    set_ivt (&guest, 0xf000, 0x1800, 0x15);     /* System services */
     set_ivt (&guest, 0xf000, 0x1000, 0x16);     /* ? */
     set_ivt (&guest, 0xf000, 0x1000, 0x17);     /* ? */
     set_ivt (&guest, 0xf000, 0x1000, 0x18);     /* ? */
