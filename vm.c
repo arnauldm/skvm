@@ -1,5 +1,6 @@
-#include <unistd.h>
+#include <stdio.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #define _VM_
 #include "vm.h"
@@ -12,7 +13,8 @@ void *GPA_to_HVA (struct vm *guest, uint64_t offset)
 }
 
 /* Setting Interrupt Vector Table (IVT) entry */
-void set_ivt (struct vm *guest, uint16_t cs, uint16_t offset, uint16_t vector)
+void set_ivt (struct vm *guest, uint16_t cs, uint16_t offset,
+              uint16_t vector)
 {
     struct ivt_entry *ivt = (struct ivt_entry *) GPA_to_HVA (guest, 0);
     ivt[vector].cs = cs;
@@ -36,4 +38,7 @@ int disk_read (struct vm *guest, char *buffer, size_t sector, size_t count)
     return (int) read (guest->disk_fd, buffer, count * 512);
 }
 
-
+void console_out (uint8_t c)
+{
+    putchar (c);
+}

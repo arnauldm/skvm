@@ -6,18 +6,18 @@
 #define RAM_SIZE (32*MBYTE)     /* Memory in bytes */
 #define KVM_FILE "/dev/kvm"     /* KVM special file */
 
-#define BYTE(x) (x & 0xFF)
-#define HBYTE(x) ((x >> 8) & 0xFF) 
+#define BYTE(x) ((uint8_t) x & 0xFF)
+#define HBYTE(x) ((x >> 8) & 0xFF)
 #define WORD(x) (x & 0xFFFF)
 
 /********************
  * BIOS environment *
  ********************/
 
-#define IVT_ADDR        0x00000000	/* Bios Interrupt Vectors Table */
-#define BDA_ADDR	0x00000400	/* Bios Data Area */
+#define IVT_ADDR        0x00000000      /* Bios Interrupt Vectors Table */
+#define BDA_ADDR	0x00000400      /* Bios Data Area */
 #define LOAD_ADDR       0x00007C00      /* Guest MBR loading address */
-#define EBDA_ADDR       0x0009FC00	/* Extended Bios Data Area */
+#define EBDA_ADDR       0x0009FC00      /* Extended Bios Data Area */
 #define BIOS_ADDR       0x000F0000
 #define PCI_HOLE_ADDR   0xC0000000      /* PCI hole physical address */
 
@@ -30,7 +30,7 @@ struct ivt_entry {
 
 
 /* EBDA data offsets */
- 
+
 #define EBDA_SIZE_OFFSET	0x00
 #define EBDA_DISK1_OFFSET	0x3D
 #define EBDA_DISK_NUM_OFFSET	0x70
@@ -40,10 +40,10 @@ struct ivt_entry {
 
 /* EBDA - Hard disk drive parameter table */
 struct hard_disk_parameter {
-    uint16_t cyl;    /* Number of cylinders */
-    uint8_t head;    /* Number of heads */
+    uint16_t cyl;               /* Number of cylinders */
+    uint8_t head;               /* Number of heads */
     uint8_t unused[11];
-    uint8_t sectors; /* Number of sectors per track */
+    uint8_t sectors;            /* Number of sectors per track */
 } __attribute__ ((packed));
 
 /* EBDA - Registers transmitted by the BIOS */
@@ -63,5 +63,3 @@ struct ebda_registers {
     uint16_t cx;
     uint16_t ax;
 } __attribute__ ((packed));
-
-

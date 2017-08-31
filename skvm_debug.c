@@ -60,21 +60,21 @@ void dump_regs (struct vm *guest)
 
 void dump_ebda_regs (struct vm *guest)
 {
-    struct ebda_registers *regs = (struct ebda_registers*) 
+    struct ebda_registers *regs = (struct ebda_registers *)
         (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
 
     fprintf (stderr,
-         "  ax: 0x%x,\tcx: 0x%x\n"
-         "  dx: 0x%x,\tbx: 0x%x\n"
-         "  sp: 0x%x,\tbp: 0x%x\n"
-         "  si: 0x%x,\tdi: 0x%x\n"
-         "  flags: 0x%x,\tip: 0x%x\n"
-         "  cs: 0x%x,\tss: 0x%x\n"
-         "  ds: 0x%x,\tes: 0x%x\n",
-         regs->ax, regs->cx, regs->dx, regs->bx, 
-         regs->sp, regs->bp, regs->si, regs->di,
-         regs->flags, regs->ip, 
-         regs->cs, regs->ss, regs->ds, regs->es);
+             "  ax: 0x%x,\tcx: 0x%x\n"
+             "  dx: 0x%x,\tbx: 0x%x\n"
+             "  sp: 0x%x,\tbp: 0x%x\n"
+             "  si: 0x%x,\tdi: 0x%x\n"
+             "  flags: 0x%x,\tip: 0x%x\n"
+             "  cs: 0x%x,\tss: 0x%x\n"
+             "  ds: 0x%x,\tes: 0x%x\n",
+             regs->ax, regs->cx, regs->dx, regs->bx,
+             regs->sp, regs->bp, regs->si, regs->di,
+             regs->flags, regs->ip,
+             regs->cs, regs->ss, regs->ds, regs->es);
 }
 
 
@@ -83,7 +83,7 @@ void dump_real_mode_stack (struct vm *guest)
     struct kvm_regs regs;
     struct kvm_sregs sregs;
 
-    char* addr;
+    char *addr;
 
     if (ioctl (guest->vcpu_fd, KVM_GET_REGS, &regs) < 0)
         pexit ("KVM_GET_REGS ioctl");
@@ -95,10 +95,9 @@ void dump_real_mode_stack (struct vm *guest)
     addr += ((sregs.ss.selector & 0xffff) << 8);
     addr += (regs.rsp & 0xffff);
 
-    for (int i=0;i<64;i+=2) 
-        fprintf (stderr, "%p: 0x%x\n", 
-            (void*) (&addr[i] - guest->vm_ram), 
-            (*(uint16_t*)(addr+i)) & 0xffff);
+    for (int i = 0; i < 64; i += 2)
+        fprintf (stderr, "%p: 0x%x\n",
+                 (void *) (&addr[i] - guest->vm_ram),
+                 (*(uint16_t *) (addr + i)) & 0xffff);
 
 }
-

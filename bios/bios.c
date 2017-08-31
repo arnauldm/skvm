@@ -86,6 +86,12 @@ get_ip:
     ret
 
 MACRO HYPERCALL
+    mov dx,#HYPERCALL_PORT  // "jump" out to the hypervisor
+    mov ax,#?1          // requested service
+    out dx,ax
+MEND
+
+MACRO PANIC
     pusha       // AX, CX, DX, BX, orig SP, BP, SI, DI
     pushf 
     call get_ip // IP -> AX
@@ -107,7 +113,7 @@ MACRO HYPERCALL
         movsw            // copy ds:si -> es:di
 
     mov dx,#HYPERCALL_PORT  // "jump" out to the hypervisor
-    mov ax,#?1          // requested service
+    mov ax,#HC_PANIC        // requested service
     out dx,ax
 
     pop ax // dummy value
@@ -251,105 +257,82 @@ void serial_print (s)
 void int10_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
   uint16_t ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
 {
-    switch (GET_AH()) {
-        // INT 10h, AH=OEh - Video teletype output
-        // (http://www.ctyme.com/intr/rb-0106.htm)
-        case 0x0E:
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX, BX);
-            outb (HYPERCALL_PORT, HC_BIOS_INT10);
-            break;
-        default:
-            serial_print ("minibios: INT 10h - AH value not supported\n");
-            #asm
-            HYPERCALL (HC_PANIC)
-            #endasm
-    }
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_ES, ES);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DS, DS);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS, FLAGS);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DI, DI);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BP, BP);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SP, orig_SP);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX, BX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX, DX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX, CX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
+
+    outb (HYPERCALL_PORT, HC_BIOS_INT10);
+
+    FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
+    DI = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DI);
+    SI = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI);
+    BX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX);
+    DX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX);
+    CX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX);
+    AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
 }
 
 
 void int13_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
   uint16_t ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
 {
-    switch (GET_AH()) {
-        case 0x00:
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
-            outb (HYPERCALL_PORT, HC_BIOS_INT13);
-            AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
-            FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
-            break;
 
-        case 0x08:
-            serial_print ("minibios: INT 13h - AH=08h not implemented\n");
-            #asm
-                hlt
-            #endasm
-            break;
-        
-        // INT 13h AH=41h: Check extensions present
-        //    (http://www.ctyme.com/intr/rb-0706.htm)
-        case 0x41:
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
-            outb (HYPERCALL_PORT, HC_BIOS_INT13);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_ES, ES);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DS, DS);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS, FLAGS);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DI, DI);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BP, BP);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SP, orig_SP);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX, BX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX, DX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX, CX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
 
-            AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
-            BX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX);
-            CX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX);
-            FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
+    outb (HYPERCALL_PORT, HC_BIOS_INT13);
 
-            break;
-
-        // INT 13h AH=42h: Extended read
-        //    (http://www.ctyme.com/intr/rb-0708.htm)
-        // result: 
-        //    CF clear if successful
-        //    AH = 00h if successful or error code
-        //    disk address packet's block count field set to number of blocks
-        //    successfully transferred
-        case 0x42:
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX, DX);
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DS, DS);
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
-            outb (HYPERCALL_PORT, HC_BIOS_INT13);
-
-            AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
-            FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
-            
-            break; 
-        default:
-            serial_print ("minibios: INT 13h - AH value not supported\n");
-            #asm
-            HYPERCALL (HC_PANIC)
-            #endasm
-    }
+    FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
+    DI = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DI);
+    SI = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI);
+    BX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX);
+    DX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX);
+    CX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX);
+    AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
 }
 
-
+        
 void int15_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
   uint16_t ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
 {
-    switch (AX) {
-        // INT 15h, AX=E820h - Query System Address Map
-        case 0xE820:
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX, BX);
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX, CX);
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX, DX);
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_ES, ES);
-            writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
-            outb (HYPERCALL_PORT, HC_BIOS_INT15);
-            #asm
-            hlt
-            #endasm
-            break;
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_ES, ES);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DS, DS);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS, FLAGS);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DI, DI);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BP, BP);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SP, orig_SP);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX, BX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX, DX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX, CX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
 
-        default:
-            serial_print ("minibios: INT 15h - AH value not supported\n");
-            #asm
-            HYPERCALL (HC_PANIC)
-            #endasm
-    }
+    outb (HYPERCALL_PORT, HC_BIOS_INT15);
+
+    FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
+    DI = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DI);
+    SI = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI);
+    BX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX);
+    DX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX);
+    CX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX);
+    AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
 }
 
 #asm
@@ -365,7 +348,7 @@ debug_handler:
     push #no_handler
     call _serial_print 
 
-    HYPERCALL (HC_PANIC)
+    PANIC
 
     pop ds // dummy
     pop ds
@@ -388,7 +371,8 @@ test_handler:
     call _serial_print 
     pop ax
     pop ax
-    HYPERCALL (HC_PANIC)
+
+    PANIC
 
     pop ds // dummy
     pop ds
@@ -440,6 +424,11 @@ int15_handler:
     pop ds
     popf
     popa
+
+    cmp ax, #0x4150
+    jne .end
+    mov eax, #0x534D4150
+.end:
 
     pop ds
     iret

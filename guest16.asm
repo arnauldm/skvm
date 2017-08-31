@@ -23,15 +23,6 @@ hello:
   jmp .start
 .end:
 
-  mov ax, 0xAAAA
-  mov bx, 0xBBBB
-  mov cx, 0xCCCC
-  mov dx, 0xDDDD
-  mov bp, 0x1234
-  mov si, 0x5678
-  mov di, 0x9ABC
-  int 0x15
-
   hlt
 
 ;--- Variables ---

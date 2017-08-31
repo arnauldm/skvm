@@ -75,8 +75,8 @@ int main (int argc, char **argv)
 
     if (bios_file == NULL || guest_file == NULL) {
         fprintf (stderr,
-             "usage: [OPTIONS]\n--bios, -b\tbios file\n"
-             "--guest, -g\tguest file\n");
+                 "usage: [OPTIONS]\n--bios, -b\tbios file\n"
+                 "--guest, -g\tguest file\n");
         exit (1);
     }
 
@@ -149,10 +149,10 @@ int main (int argc, char **argv)
      * not really needeed as there's not real threat, but it's more "clean"
      * like that. */
     region = (struct kvm_userspace_memory_region) {
-        .slot = 0,   /* bits 0-15 of "slot" specifies the slot id */
-        .flags = 0,  /* none or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
-        .guest_phys_addr = 0,       /* start of the VM physical memory */
-        .memory_size = guest.ram_size,     /* bytes */
+        .slot = 0,          /* bits 0-15 of "slot" specifies the slot id */
+        .flags = 0,         /* none or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
+        .guest_phys_addr = 0,           /* start of the VM physical memory */
+        .memory_size = guest.ram_size,  /* bytes */
         .userspace_addr = (uint64_t) guest.vm_ram,  /* start of the userspace allocated memory */
     };
 
@@ -166,7 +166,7 @@ int main (int argc, char **argv)
      * kvm_run prior to calling the KVM_RUN ioctl, and obtain information about
      * the reason KVM_RUN returned by looking up structure members." */
 
-    guest.vcpu_fd = ioctl (guest.vm_fd, KVM_CREATE_VCPU, 0);        /* last param is the cpu_id */
+    guest.vcpu_fd = ioctl (guest.vm_fd, KVM_CREATE_VCPU, 0);    /* last param is the cpu_id */
     if (guest.vcpu_fd < 0)
         pexit ("KVM_CREATE_VCPU ioctl");
 
@@ -197,8 +197,8 @@ int main (int argc, char **argv)
         pexit ("KVM_GET_REGS ioctl");
 
     regs.rip = LOAD_ADDR;
-    regs.rflags = 0x0002;            /* bit 1 is reserved and must be set */
-    regs.rdx = 0x0080;            /* DL = 80h - 1st hard disk */
+    regs.rflags = 0x0002;       /* bit 1 is reserved and must be set */
+    regs.rdx = 0x0080;          /* DL = 80h - 1st hard disk */
 
     ret = ioctl (guest.vcpu_fd, KVM_SET_REGS, &regs);
     if (ret < 0)
@@ -265,27 +265,9 @@ int main (int argc, char **argv)
         pexit (guest_file);
 
     /* Load the disk's MBR (the first 512 bytes) at 0x7C00 */
-    ret = disk_read (&guest, GPA_to_HVA(&guest, LOAD_ADDR), 0, 1);
+    ret = disk_read (&guest, GPA_to_HVA (&guest, LOAD_ADDR), 0, 1);
     if (ret < 0)
         pexit ("read");
-
-//    /* Copy hard disk parameters to the Extended BIOS Data Area (EBDA) */
-//    off_t disk_size = lseek (disk_fd, 0, SEEK_END);
-//    if (disk_size < 0)
-//        pexit ("lseek");
-//
-//    struct hard_disk_parameter *hd = (struct hard_disk_parameter *)
-//        (vm_ram + EBDA_ADDR + EBDA_DISK1_OFFSET);
-//
-//    hd->head = 255;
-//    hd->sectors = 63;
-//    hd->cyl = (uint16_t) ((disk_size / (hd->head * hd->sectors * 512)) + 1);
-//
-//    if (hd->cyl > 1023)
-//        pexit ("disk too big");
-//
-//    DEBUG ("disk geometry: CHS = %d / %d / %d\n",
-//        hd->cyl, hd->head, hd->sectors);
 
     /**************
      * Run the VM 
@@ -309,7 +291,8 @@ int main (int argc, char **argv)
         case KVM_EXIT_FAIL_ENTRY:
             fprintf (stderr,
                      "KVM_EXIT_FAIL_ENTRY: fail_entry.hardware_entry_failure_reason: = 0x%llx\n",
-                     guest.kvm_run->fail_entry.hardware_entry_failure_reason);
+                     guest.kvm_run->
+                     fail_entry.hardware_entry_failure_reason);
             return 1;
 
         case KVM_EXIT_MMIO:
@@ -318,7 +301,8 @@ int main (int argc, char **argv)
             return 1;
 
         default:
-            fprintf (stderr, "exit_reason = 0x%x\n", guest.kvm_run->exit_reason);
+            fprintf (stderr, "exit_reason = 0x%x\n",
+                     guest.kvm_run->exit_reason);
             return 1;
         }
     }

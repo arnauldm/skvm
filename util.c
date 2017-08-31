@@ -7,4 +7,3 @@ void pexit (char *s)
     perror (s);
     exit (1);
 }
-
