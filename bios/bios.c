@@ -52,12 +52,6 @@ typedef unsigned short uint16_t;
 #define GET_CH() *(((uint8_t *)&CX)+1)
 #define GET_DH() *(((uint8_t *)&DX)+1)
 
-struct hard_disk_parameter {
-    uint16_t cyl;    /* Number of cylinders */
-    uint8_t head;    /* Number of heads */
-    uint8_t unused[11];
-    uint8_t sectors; /* Number of sectors per track */
-};
 
 
 //---------------------------------------------------------------------------
