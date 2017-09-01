@@ -120,8 +120,11 @@ void handle_bios_int10 (struct vm *guest)
 
 void handle_bios_int13 (struct vm *guest)
 {
-    uint32_t dap_GPA, buffer_GPA;       /* Guest Physical Address (GPA) */
+    uint32_t buffer_GPA;    /* Guest Physical Address (GPA) */
     struct disk_address_packet *dap;
+    struct drive_parameters *params;
+    struct ebda_drive_chs_params *ebda_chs_params;
+    off_t disk_size;
     int ret;
 
     struct ebda_registers *regs = (struct ebda_registers *)
@@ -136,13 +139,35 @@ void handle_bios_int13 (struct vm *guest)
         regs->ax &= 0x00FF;     /* AH = 0x00 */
         break;
 
+    /* INT 13h, AH=08h - Read drive parameters */
+    case 0x08:
+        fprintf (stderr, "int 13h, ah=08h\n");
+
+        ebda_chs_params = (struct ebda_drive_chs_params *)
+            gpa_to_hva (guest, EBDA_ADDR + EBDA_DISK1_OFFSET);
+
+        /* DH   last index of heads = number_of - 1
+         * DL   number of hard disk drives
+         * CX [7:6] [15:8]  last index of cylinders = number_of - 1 
+         *    [5:0]         last index of sectors per track = number_of */
+        regs->dx = (uint16_t)
+           ((((uint16_t) ebda_chs_params->head - 1) << 8) + 1);
+        regs->cx = (uint16_t)
+           (((ebda_chs_params->cyl & 0x00FF) << 8) +
+            ((ebda_chs_params->cyl & 0x0300) >> 2) +
+            ((uint16_t) ebda_chs_params->sectors_per_track & 0x003F));
+
+        /* Status of last hard disk drive operation = OK */
+        regs->flags &= 0xFFFE;  /* Clear CF */
+        regs->ax = 0x0000;
+        *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
+
     /*
      * INT 13h, AH=41h - Check extensions present
      * (http://www.ctyme.com/intr/rb-0706.htm) 
      */
     case 0x41:
         fprintf (stderr, "int 13h, ah=41h\n");
-        regs->flags &= 0xFFFE;  /* Clear CF */
         regs->ax = 0x0100;      /* 1.x */
         regs->bx = 0xAA55;
 
@@ -150,6 +175,7 @@ void handle_bios_int13 (struct vm *guest)
         regs->cx = 0x0001;
 
         /* Status of last hard disk drive operation = OK */
+        regs->flags &= 0xFFFE;  /* Clear CF */
         *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
 
         break;
@@ -167,21 +193,15 @@ void handle_bios_int13 (struct vm *guest)
     case 0x42:
         fprintf (stderr, "int 13h, ah=42h\n");
 
-        dap_GPA = rmode_to_gpa (regs->ds, regs->si);
-        dap =
-            (struct disk_address_packet *) gpa_to_hva (guest,
-                                                       rmode_to_gpa (regs->
-                                                                     ds,
-                                                                     regs->
-                                                                     si));
+        dap = (struct disk_address_packet *)
+            gpa_to_hva (guest, rmode_to_gpa (regs->ds, regs->si));
 
         buffer_GPA =
             ((dap->buffer >> 12) & 0xFFFF0) + (dap->buffer & 0xFFFF);
 
-        fprintf (stderr, "disk address packet: 0x%x (%x:%x)\n", dap_GPA,
-                 regs->ds, regs->si);
-        fprintf (stderr, "count: %d, buffer: %x (0x%x), sector: %ld\n",
-                 dap->count, dap->buffer, buffer_GPA, dap->sector);
+        fprintf (stderr, "disk address packet: %x:%x\n", regs->ds, regs->si);
+        fprintf (stderr, "sector: %ld, count: %d, buffer: %x (0x%x)\n",
+                 dap->sector, dap->count, dap->buffer, buffer_GPA);
 
         ret =
             disk_read (guest, gpa_to_hva (guest, buffer_GPA), dap->sector,
@@ -189,10 +209,9 @@ void handle_bios_int13 (struct vm *guest)
         if (ret < 0)
             pexit ("disk_read()");
 
+        /* Status of last hard disk drive operation = OK */
         regs->flags &= 0xFFFE;  /* Clear CF */
         regs->ax &= 0x00FF;     /* AH = 0x00 */
-
-        /* Status of last hard disk drive operation = OK */
         *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
 
         break;
@@ -212,8 +231,32 @@ void handle_bios_int13 (struct vm *guest)
      */
     case 0x48:
         fprintf (stderr, "int 13h, ah=48h\n");
-        dump_ebda_regs (guest);
-        exit (1);
+
+        ebda_chs_params = (struct ebda_drive_chs_params *)
+            gpa_to_hva (guest, EBDA_ADDR + EBDA_DISK1_OFFSET);
+
+        params = (struct drive_parameters *)
+            gpa_to_hva (guest, rmode_to_gpa (regs->ds, regs->si));
+
+        params->size_of = 26;
+        params->flags   = FLAGS_CHS_IS_VALID;
+        params->cyl     = ebda_chs_params->cyl;
+        params->head    = ebda_chs_params->head;
+        params->sectors_per_track = ebda_chs_params->sectors_per_track;
+
+        disk_size = lseek (guest->disk_fd, 0, SEEK_END);
+        if (disk_size < 0)
+            pexit ("lseek");
+        params->sectors = (uint64_t) disk_size / 512;
+
+        params->sector_size = 512;
+
+        /* Status of last hard disk drive operation = OK */
+        regs->flags &= 0xFFFE;  /* Clear CF */
+        regs->ax &= 0x00FF;     /* AH = 0x00 */
+        *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
+
+        break;
 
     /* 
      * INT 13h AH=4Bh - Bootable CD-ROM - get status
@@ -259,6 +302,8 @@ void handle_bios_int15 (struct vm *guest)
     }
 
     /*
+     * INT 15h, AX=E820h - Query System Address Map 
+     * ============================================
      * Input 
      * -----
      * EDX = 534D4150h ('SMAP')

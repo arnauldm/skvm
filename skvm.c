@@ -41,6 +41,10 @@ int main (int argc, char **argv)
     /* struct kvm_pit_config pit_config = {.flags = 0 }; */
     struct kvm_userspace_memory_region region;
 
+    /* Guest hard disk parameters */
+    off_t disk_size;
+    struct ebda_drive_chs_params *hd;
+
     int mmap_size;
     int ret, i;
 
@@ -268,6 +272,26 @@ int main (int argc, char **argv)
     ret = disk_read (&guest, gpa_to_hva (&guest, LOAD_ADDR), 0, 1);
     if (ret < 0)
         pexit ("read");
+
+    /* Copy hard disk parameters to the Extended BIOS Data Area (EBDA) */
+    disk_size = lseek (guest.disk_fd, 0, SEEK_END);
+    if (disk_size < 0)
+        pexit ("lseek");
+
+    hd = (struct ebda_drive_chs_params *)
+        gpa_to_hva (&guest, EBDA_ADDR + EBDA_DISK1_OFFSET);
+
+    hd->head = 255;
+    hd->sectors_per_track = 63;
+    hd->cyl = (uint16_t)
+        (disk_size / (hd->head * hd->sectors_per_track * 512));
+
+    if (hd->cyl > 1023)
+        pexit ("disk too big");
+
+    fprintf (stderr, "disk geometry: CHS = %d / %d / %d (absolutes sectors: %ld)\n",
+        hd->cyl, hd->head, hd->sectors_per_track, disk_size/512);
+
 
     /**************
      * Run the VM 

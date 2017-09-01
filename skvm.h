@@ -39,11 +39,11 @@ struct ivt_entry {
 #define EBDA_REGS_OFFSET	0x200
 
 /* EBDA - Hard disk drive parameter table */
-struct hard_disk_parameter {
+struct ebda_drive_chs_params {
     uint16_t cyl;               /* Number of cylinders */
     uint8_t head;               /* Number of heads */
     uint8_t unused[11];
-    uint8_t sectors;            /* Number of sectors per track */
+    uint8_t sectors_per_track;  /* Number of sectors per track */
 } __attribute__ ((packed));
 
 /* EBDA - Registers transmitted by the BIOS */

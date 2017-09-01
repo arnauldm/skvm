@@ -19,16 +19,43 @@ extern void handle_exit_io (struct vm *);
 extern void handle_exit_hlt (void);
 #endif
 
-/* int 13h, ah=42h - Extended read */
+/*
+ * INT 13h AH=42h - Extended read
+ * (http://www.ctyme.com/intr/rb-0708.htm)
+ */
 struct disk_address_packet {
-    uint8_t size_of;            // Size of this struct 
-    uint8_t reserved;           // Should be at 0
-    uint16_t count;             // Number of sectors to be read
-    uint32_t buffer;            // Segment:offset pointer to the buffer
-    uint64_t sector;            // Starting sector number (1st sector has number 0)
+    uint8_t size_of;    /* Size of this struct */
+    uint8_t reserved;   /* Should be at 0 */
+    uint16_t count;     /* Number of sectors to be read */
+    uint32_t buffer;    /* Segment:offset pointer to the buffer */
+    uint64_t sector;    /* Starting sector number (1st sector has number 0) */
 } __attribute__ ((packed));
 
-/* int 15h, ax=e820h - Query System Address Map */
+/*
+ * INT 13h AH=48h - Get Drive Parameters
+ */
+struct drive_parameters {
+    uint16_t size_of;       /* = 26 */
+    uint16_t flags;
+    uint32_t cyl;           /* Number of cylinders */
+    uint32_t head;          /* Number of heads */
+    uint32_t sectors_per_track;   /* Number of sectors per track */
+    uint64_t sectors;       /* Absolute number of sectors */
+    uint16_t sector_size;   /* Bytes per sector */
+} __attribute__ ((packed));
+
+/* flags bits */
+#define FLAGS_DMA_BOUNDARY_ERROR	(1 << 0)
+#define FLAGS_CHS_IS_VALID		(1 << 1)
+#define FLAGS_REMOVABLE			(1 << 2)
+#define FLAGS_WRITE_WITH_VERIFY         (1 << 3)
+#define FLAGS_CHANGE_LINE_SUPPORT       (1 << 4)
+#define FLAGS_LOCKABLE                  (1 << 5)
+#define FLAGS_CHS_SET_TO_MAX            (1 << 6)
+
+/* 
+ * INT 15h, AX=E820h - Query System Address Map 
+ */
 struct e820_entry {
     uint64_t base;
     uint64_t length;
