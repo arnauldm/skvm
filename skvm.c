@@ -151,8 +151,8 @@ int main (int argc, char **argv)
     region = (struct kvm_userspace_memory_region) {
         .slot = 0,          /* bits 0-15 of "slot" specifies the slot id */
         .flags = 0,         /* none or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
-        .guest_phys_addr = 0,           /* start of the VM physical memory */
-        .memory_size = guest.ram_size,  /* bytes */
+        .guest_phys_addr = 0,       /* start of the VM physical memory */
+        .memory_size = guest.ram_size,      /* bytes */
         .userspace_addr = (uint64_t) guest.vm_ram,  /* start of the userspace allocated memory */
     };
 
@@ -265,7 +265,7 @@ int main (int argc, char **argv)
         pexit (guest_file);
 
     /* Load the disk's MBR (the first 512 bytes) at 0x7C00 */
-    ret = disk_read (&guest, GPA_to_HVA (&guest, LOAD_ADDR), 0, 1);
+    ret = disk_read (&guest, gpa_to_hva (&guest, LOAD_ADDR), 0, 1);
     if (ret < 0)
         pexit ("read");
 
@@ -291,8 +291,8 @@ int main (int argc, char **argv)
         case KVM_EXIT_FAIL_ENTRY:
             fprintf (stderr,
                      "KVM_EXIT_FAIL_ENTRY: fail_entry.hardware_entry_failure_reason: = 0x%llx\n",
-                     guest.kvm_run->
-                     fail_entry.hardware_entry_failure_reason);
+                     guest.kvm_run->fail_entry.
+                     hardware_entry_failure_reason);
             return 1;
 
         case KVM_EXIT_MMIO:

@@ -84,36 +84,36 @@ void handle_bios_int10 (struct vm *guest)
 
     switch (HBYTE (regs->ax)) {
 
-        /* 
-         * INT 10h, AH=O1h - Video set text-mode cursor shape
-         */
-        case 0x01:
-            fprintf (stderr, "int 10h, ah=01h\n");
-            break;
+    /* 
+     * INT 10h, AH=O1h - Video set text-mode cursor shape
+     */
+    case 0x01:
+        fprintf (stderr, "int 10h, ah=01h\n");
+        break;
 
-        /* 
-         * INT 10h, AH=O3h - Video Read Cursor Position and Size
-         * (http://vitaly_filatov.tripod.com/ng/asm/asm_023.4.html) 
-         */
-        case 0x03:
-            fprintf (stderr, "int 10h, ah=03h\n");
-            regs->cx = 0x0007;
-            regs->dx = 0x0000;
-            break;
+    /* 
+     * INT 10h, AH=O3h - Video Read Cursor Position and Size
+     * (http://vitaly_filatov.tripod.com/ng/asm/asm_023.4.html) 
+     */
+    case 0x03:
+        fprintf (stderr, "int 10h, ah=03h\n");
+        regs->cx = 0x0007;
+        regs->dx = 0x0000;
+        break;
 
-        /* 
-         * INT 10h, AH=OEh - Video teletype output
-         * (http://www.ctyme.com/intr/rb-0106.htm)
-         */
-        case 0x0E:
-            console_out (BYTE (regs->ax));
-            break;
+    /* 
+     * INT 10h, AH=OEh - Video teletype output
+     * (http://www.ctyme.com/intr/rb-0106.htm)
+     */
+    case 0x0E:
+        console_out (BYTE (regs->ax));
+        break;
 
-        default:
-            fprintf (stderr, "handle_bios_int10(): ah=%xh not implemented\n",
+    default:
+        fprintf (stderr, "handle_bios_int10(): ah=%xh not implemented\n",
                  HBYTE (regs->ax));
-            dump_ebda_regs (guest);
-            exit (1);
+        dump_ebda_regs (guest);
+        exit (1);
     }
 }
 
@@ -143,14 +143,14 @@ void handle_bios_int13 (struct vm *guest)
     case 0x41:
         fprintf (stderr, "int 13h, ah=41h\n");
         regs->flags &= 0xFFFE;  /* Clear CF */
-        regs->ax = 0x0100; /* 1.x */
+        regs->ax = 0x0100;      /* 1.x */
         regs->bx = 0xAA55;
 
         /* extended disk access functions (AH=42h-44h,47h,48h) supported */
         regs->cx = 0x0001;
 
         /* Status of last hard disk drive operation = OK */
-        *((uint8_t *) GPA_to_HVA (guest, BDA_ADDR + 0x74)) = 0x00;
+        *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
 
         break;
 
@@ -166,8 +166,14 @@ void handle_bios_int13 (struct vm *guest)
      */
     case 0x42:
         fprintf (stderr, "int 13h, ah=42h\n");
-        dap_GPA = ((uint32_t) regs->ds << 4) + (uint32_t) regs->si;
-        dap = (struct disk_address_packet *) (guest->vm_ram + dap_GPA);
+
+        dap_GPA = rmode_to_gpa (regs->ds, regs->si);
+        dap =
+            (struct disk_address_packet *) gpa_to_hva (guest,
+                                                       rmode_to_gpa (regs->
+                                                                     ds,
+                                                                     regs->
+                                                                     si));
 
         buffer_GPA =
             ((dap->buffer >> 12) & 0xFFFF0) + (dap->buffer & 0xFFFF);
@@ -178,7 +184,7 @@ void handle_bios_int13 (struct vm *guest)
                  dap->count, dap->buffer, buffer_GPA, dap->sector);
 
         ret =
-            disk_read (guest, GPA_to_HVA (guest, buffer_GPA), dap->sector,
+            disk_read (guest, gpa_to_hva (guest, buffer_GPA), dap->sector,
                        dap->count);
         if (ret < 0)
             pexit ("disk_read()");
@@ -187,7 +193,7 @@ void handle_bios_int13 (struct vm *guest)
         regs->ax &= 0x00FF;     /* AH = 0x00 */
 
         /* Status of last hard disk drive operation = OK */
-        *((uint8_t *) GPA_to_HVA (guest, BDA_ADDR + 0x74)) = 0x00;
+        *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
 
         break;
 
@@ -227,10 +233,13 @@ void handle_bios_int13 (struct vm *guest)
 }
 
 
-void set_e820_entry (struct vm *guest, uint16_t segment, uint16_t offset, uint64_t base, uint64_t limit, uint8_t type)
+void set_e820_entry (struct vm *guest, uint16_t segment, uint16_t offset,
+                     uint64_t base, uint64_t limit, uint8_t type)
 {
     struct e820_entry *entry;
-    entry = (struct e820_entry *) (guest->vm_ram + ((segment << 4) + offset));
+    entry =
+        (struct e820_entry *) gpa_to_hva (guest,
+                                          rmode_to_gpa (segment, offset));
     entry->base = base;
     entry->length = limit - base;
     entry->type = type;
@@ -244,7 +253,7 @@ void handle_bios_int15 (struct vm *guest)
 
     if (WORD (regs->ax) != 0xE820) {
         fprintf (stderr, "handle_bios_int15(): AH=%Xh not implemented\n",
-             HBYTE (regs->ax));
+                 HBYTE (regs->ax));
         dump_ebda_regs (guest);
         exit (1);
     }
@@ -282,25 +291,28 @@ void handle_bios_int15 (struct vm *guest)
     fprintf (stderr, "int 15h, ax=e820h\n");
 
     switch (regs->bx) {
-        case 0:
-            set_e820_entry (guest, regs->es, WORD(regs->di), 0, 0xA0000, E820_RAM);
-            regs->bx = 1;
-            break;
-        case 1:
-            set_e820_entry (guest, regs->es, WORD(regs->di), 0xA0000, 0x100000, E820_RESERVED);
-            regs->bx = 2;
-            break;
-        case 2:
-            set_e820_entry (guest, regs->es, WORD(regs->di), 0x100000, guest->ram_size, E820_RAM);
-            regs->bx = 3;
-            break;
-        default:
-            regs->flags |= 0x0001;  /* Set CF */
-            regs->ax = 0x86; /* Function not supported */
-            return;
+    case 0:
+        set_e820_entry (guest, regs->es, WORD (regs->di), 0, 0xA0000,
+                        E820_RAM);
+        regs->bx = 1;
+        break;
+    case 1:
+        set_e820_entry (guest, regs->es, WORD (regs->di), 0xA0000,
+                        0x100000, E820_RESERVED);
+        regs->bx = 2;
+        break;
+    case 2:
+        set_e820_entry (guest, regs->es, WORD (regs->di), 0x100000,
+                        guest->ram_size, E820_RAM);
+        regs->bx = 3;
+        break;
+    default:
+        regs->flags |= 0x0001;  /* Set CF */
+        regs->ax = 0x86;        /* Function not supported */
+        return;
     }
 
-    regs->flags &= 0xFFFE;  // Clear CF
+    regs->flags &= 0xFFFE;      // Clear CF
     regs->ax = 0x4150;
     regs->cx = 0x14;
 }
