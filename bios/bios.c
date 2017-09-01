@@ -32,6 +32,7 @@ typedef unsigned short uint16_t;
 #define HC_BIOS_INT10 0x10
 #define HC_BIOS_INT13 0x13
 #define HC_BIOS_INT15 0x15
+#define HC_BIOS_INT1A 0x1A
 #define HC_PANIC 0xFF
 
 #define SET_AL(val8) *((uint8_t *)&AX) = (val8)
@@ -329,6 +330,33 @@ void int15_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
     AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
 }
 
+        
+void int1a_c_handler (ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX)
+  uint16_t ES, DS, FLAGS, DI, SI, BP, orig_SP, BX, DX, CX, AX;
+{
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_ES, ES);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DS, DS);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS, FLAGS);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DI, DI);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI, SI);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BP, BP);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SP, orig_SP);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX, BX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX, DX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX, CX);
+    writew (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX, AX);
+
+    outb (HYPERCALL_PORT, HC_BIOS_INT1A);
+
+    FLAGS = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_FLAGS);
+    DI = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DI);
+    SI = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_SI);
+    BX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_BX);
+    DX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_DX);
+    CX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_CX);
+    AX = readw (EBDA_SEG, EBDA_REGS_OFFSET + EBDA_REGS_AX);
+}
+
 #asm
 
 //---------------------------------------------------------------------------
@@ -423,6 +451,32 @@ int15_handler:
     jne .end
     mov eax, #0x534D4150
 .end:
+
+    pop ds
+    iret
+
+//---------------------------------------------------------------------------
+.org 0x4000 
+int1a_handler:
+    push ds 
+
+    // Set function parameters
+    pusha // AX, CX, DX, BX, orig_SP, BP, SI, DI
+    pushf 
+    push ds
+    push es
+
+    // We set DS here not to overlap the 'DS' parameter passed to the
+    // _int15_c_handler
+    push #0xf000
+    pop ds
+
+    call _int1a_c_handler
+
+    pop es
+    pop ds
+    popf
+    popa
 
     pop ds
     iret

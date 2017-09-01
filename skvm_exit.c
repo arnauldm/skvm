@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/times.h>
 #include <unistd.h>
 
 #include <linux/kvm.h>
@@ -21,6 +22,13 @@
 #include "skvm.h"
 #include "skvm_exit.h"
 #include "skvm_debug.h"
+
+#define false 0
+#define true  1
+#define DEBUG_INT10 false
+#define DEBUG_INT13 true
+#define DEBUG_INT15 true
+#define DEBUG_INT1A false
 
 
 void handle_exit_io (struct vm *guest)
@@ -55,7 +63,7 @@ void handle_exit_io_hypercall (struct vm *guest)
     case HC_PANIC:
         fprintf (stderr, "BIOS panic\n");
         dump_ebda_regs (guest);
-        dump_real_mode_stack (guest);
+        //dump_real_mode_stack (guest);
         exit (1);
 
     case HC_BIOS_INT10:
@@ -70,6 +78,10 @@ void handle_exit_io_hypercall (struct vm *guest)
         handle_bios_int15 (guest);
         break;
 
+    case HC_BIOS_INT1A:
+        handle_bios_int1a (guest);
+        break;
+
     default:
         fprintf (stderr, "HYPERCALL not implemented (0x%x)\n", data);
     }
@@ -80,7 +92,8 @@ void handle_exit_io_hypercall (struct vm *guest)
 void handle_bios_int10 (struct vm *guest)
 {
     struct ebda_registers *regs = (struct ebda_registers *)
-        (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
+        gpa_to_hva (guest, EBDA_ADDR + EBDA_REGS_OFFSET);
+    int i;
 
     switch (HBYTE (regs->ax)) {
 
@@ -88,7 +101,14 @@ void handle_bios_int10 (struct vm *guest)
      * INT 10h, AH=O1h - Video set text-mode cursor shape
      */
     case 0x01:
-        fprintf (stderr, "int 10h, ah=01h\n");
+        if (DEBUG_INT10) fprintf (stderr, "int 10h, ah=01h\n");
+        break;
+
+    /* 
+     * INT 10h, AH=O2h - Set cursor position
+     */
+    case 0x02:
+        if (DEBUG_INT10) fprintf (stderr, "int 10h, ah=02h\n");
         break;
 
     /* 
@@ -96,9 +116,18 @@ void handle_bios_int10 (struct vm *guest)
      * (http://vitaly_filatov.tripod.com/ng/asm/asm_023.4.html) 
      */
     case 0x03:
-        fprintf (stderr, "int 10h, ah=03h\n");
+        if (DEBUG_INT10) fprintf (stderr, "int 10h, ah=03h\n");
         regs->cx = 0x0007;
         regs->dx = 0x0000;
+        break;
+
+    /* 
+     * INT 10h, AH=O9h - Write character and attribute at cursor position
+     * AL = Character, BH = Page Number, BL = Color, CX = Number of times to print character
+     */
+    case 0x09:
+        for (i=0;i<regs->cx;i++)
+            console_out (BYTE (regs->ax));
         break;
 
     /* 
@@ -125,23 +154,23 @@ void handle_bios_int13 (struct vm *guest)
     struct drive_parameters *params;
     struct ebda_drive_chs_params *ebda_chs_params;
     off_t disk_size;
-    int ret;
+    ssize_t ret;
 
     struct ebda_registers *regs = (struct ebda_registers *)
-        (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
+        gpa_to_hva (guest, EBDA_ADDR + EBDA_REGS_OFFSET);
 
     switch (HBYTE (regs->ax)) {
 
     /* INT 13h, AH=00h - Reset Disk Drive */
     case 0x00:
-        fprintf (stderr, "int 13h, ah=00h\n");
+        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=00h\n");
         regs->flags &= 0xFFFE;  /* Clear CF */
         regs->ax &= 0x00FF;     /* AH = 0x00 */
         break;
 
     /* INT 13h, AH=08h - Read drive parameters */
     case 0x08:
-        fprintf (stderr, "int 13h, ah=08h\n");
+        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=08h\n");
 
         ebda_chs_params = (struct ebda_drive_chs_params *)
             gpa_to_hva (guest, EBDA_ADDR + EBDA_DISK1_OFFSET);
@@ -167,7 +196,7 @@ void handle_bios_int13 (struct vm *guest)
      * (http://www.ctyme.com/intr/rb-0706.htm) 
      */
     case 0x41:
-        fprintf (stderr, "int 13h, ah=41h\n");
+        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=41h\n");
         regs->ax = 0x0100;      /* 1.x */
         regs->bx = 0xAA55;
 
@@ -191,7 +220,7 @@ void handle_bios_int13 (struct vm *guest)
      *    successfully transferred
      */
     case 0x42:
-        fprintf (stderr, "int 13h, ah=42h\n");
+        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=42h\n");
 
         dap = (struct disk_address_packet *)
             gpa_to_hva (guest, rmode_to_gpa (regs->ds, regs->si));
@@ -199,8 +228,8 @@ void handle_bios_int13 (struct vm *guest)
         buffer_GPA =
             ((dap->buffer >> 12) & 0xFFFF0) + (dap->buffer & 0xFFFF);
 
-        fprintf (stderr, "disk address packet: %x:%x\n", regs->ds, regs->si);
-        fprintf (stderr, "sector: %ld, count: %d, buffer: %x (0x%x)\n",
+        //fprintf (stderr, "disk address packet: %x:%x\n", regs->ds, regs->si);
+        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=42h: sector: %ld, count: %d, buffer: %x (0x%x)\n",
                  dap->sector, dap->count, dap->buffer, buffer_GPA);
 
         ret =
@@ -230,7 +259,7 @@ void handle_bios_int13 (struct vm *guest)
      * DS:SI    result
      */
     case 0x48:
-        fprintf (stderr, "int 13h, ah=48h\n");
+        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=48h\n");
 
         ebda_chs_params = (struct ebda_drive_chs_params *)
             gpa_to_hva (guest, EBDA_ADDR + EBDA_DISK1_OFFSET);
@@ -262,7 +291,7 @@ void handle_bios_int13 (struct vm *guest)
      * INT 13h AH=4Bh - Bootable CD-ROM - get status
      */
     case 0x4b:
-        fprintf (stderr, "int 13h, ah=4bh\n");
+        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=4bh\n");
         regs->flags |= 0x0001;  /* Error, set CF */
         break;
 
@@ -292,7 +321,7 @@ void set_e820_entry (struct vm *guest, uint16_t segment, uint16_t offset,
 void handle_bios_int15 (struct vm *guest)
 {
     struct ebda_registers *regs = (struct ebda_registers *)
-        (guest->vm_ram + EBDA_ADDR + EBDA_REGS_OFFSET);
+        gpa_to_hva (guest, EBDA_ADDR + EBDA_REGS_OFFSET);
 
     if (WORD (regs->ax) != 0xE820) {
         fprintf (stderr, "handle_bios_int15(): AH=%Xh not implemented\n",
@@ -333,7 +362,7 @@ void handle_bios_int15 (struct vm *guest)
      * 03h    ACPI Reclaim Memory (usable by OS after reading ACPI tables)
      * 04h    ACPI NVS Memory (OS is required to save this memory between NVS
      */
-    fprintf (stderr, "int 15h, ax=e820h\n");
+    if (DEBUG_INT15) fprintf (stderr, "int 15h, ax=e820h\n");
 
     switch (regs->bx) {
     case 0:
@@ -363,8 +392,48 @@ void handle_bios_int15 (struct vm *guest)
 }
 
 
+void handle_bios_int1a (struct vm *guest)
+{
+    struct tms dummy;
+    clock_t elapsed;
+    struct ebda_registers *regs = (struct ebda_registers *)
+        gpa_to_hva (guest, EBDA_ADDR + EBDA_REGS_OFFSET);
+
+    switch (HBYTE (regs->ax)) {
+
+    /*
+     * INT 1Ah AH=00h - Read current time
+     * result:
+     *    CX High word of tick count
+     *    DX Low word of tick count
+     *    AL 00h = Day rollover has not occurred 
+     */
+    case 0x00:
+        if (DEBUG_INT1A) fprintf (stderr, "int 1ah, ax=00h\n");
+        elapsed = times (&dummy) - guest->clock_start;
+        if (elapsed > 0) {
+            regs->cx = (int16_t) (elapsed & 0xFFFF);
+            regs->dx = (int16_t) ((elapsed & 0xFFFF0000) >> 16);
+        } else {
+            regs->cx = 0x0000;
+            regs->dx = 0x0000;
+        }
+        regs->ax = 0x0000;
+        break;
+
+    default:
+        fprintf (stderr, "handle_bios_int1a(): ah=%xh not implemented\n",
+                 HBYTE (regs->ax));
+        dump_ebda_regs (guest);
+        exit (1);
+    }
+}
+
+
 void handle_exit_io_serial (struct vm *guest)
 {
+    // fprintf (stderr, "handle_exit_io_serial()\n");
+
     if (guest->kvm_run->io.direction == KVM_EXIT_IO_OUT) {
 
         /* Linux/Documentation/virtual/kvm/api.txt - 

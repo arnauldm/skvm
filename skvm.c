@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/times.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -240,11 +241,11 @@ int main (int argc, char **argv)
 
     set_ivt (&guest, 0xf000, 0x1000, 0x14);     /* Serial communication */
     set_ivt (&guest, 0xf000, 0x3000, 0x15);     /* System services */
-    set_ivt (&guest, 0xf000, 0x1000, 0x16);     /* ? */
+    set_ivt (&guest, 0xf000, 0x1800, 0x16);     /* Key stroke */
     set_ivt (&guest, 0xf000, 0x1000, 0x17);     /* ? */
     set_ivt (&guest, 0xf000, 0x1000, 0x18);     /* ? */
     set_ivt (&guest, 0xf000, 0x1000, 0x19);     /* Boot load */
-    set_ivt (&guest, 0xf000, 0x1000, 0x1A);     /* ? */
+    set_ivt (&guest, 0xf000, 0x4000, 0x1A);     /* Real Time Clock Services */
 
     /* Copy BIOS in memory */
     bios_fd = open (bios_file, O_RDONLY);
@@ -278,6 +279,9 @@ int main (int argc, char **argv)
     if (disk_size < 0)
         pexit ("lseek");
 
+    fprintf (stderr, "disk size: %ld bytes (%ld MB)\n",
+        disk_size, disk_size / 0x100000);
+
     hd = (struct ebda_drive_chs_params *)
         gpa_to_hva (&guest, EBDA_ADDR + EBDA_DISK1_OFFSET);
 
@@ -292,6 +296,9 @@ int main (int argc, char **argv)
     fprintf (stderr, "disk geometry: CHS = %d / %d / %d (absolutes sectors: %ld)\n",
         hd->cyl, hd->head, hd->sectors_per_track, disk_size/512);
 
+    /* Set starting time (in clock ticks) */
+    struct tms dummy;
+    guest.clock_start = times (&dummy);
 
     /**************
      * Run the VM 
