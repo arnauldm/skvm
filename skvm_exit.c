@@ -26,9 +26,10 @@
 #define false 0
 #define true  1
 #define DEBUG_INT10 false
-#define DEBUG_INT13 true
+#define DEBUG_INT13 false
 #define DEBUG_INT15 true
-#define DEBUG_INT1A false
+#define DEBUG_INT16 true
+#define DEBUG_INT1A true
 
 
 void handle_exit_io (struct vm *guest)
@@ -78,6 +79,10 @@ void handle_exit_io_hypercall (struct vm *guest)
         handle_bios_int15 (guest);
         break;
 
+    case HC_BIOS_INT16:
+        handle_bios_int16 (guest);
+        break;
+
     case HC_BIOS_INT1A:
         handle_bios_int1a (guest);
         break;
@@ -106,6 +111,10 @@ void handle_bios_int10 (struct vm *guest)
 
     /* 
      * INT 10h, AH=O2h - Set cursor position
+     *
+     * Return
+     * ------
+     * BH = Page Number, DH = Row, DL = Column
      */
     case 0x02:
         if (DEBUG_INT10) fprintf (stderr, "int 10h, ah=02h\n");
@@ -114,16 +123,26 @@ void handle_bios_int10 (struct vm *guest)
     /* 
      * INT 10h, AH=O3h - Video Read Cursor Position and Size
      * (http://vitaly_filatov.tripod.com/ng/asm/asm_023.4.html) 
+     *
+     * Return
+     * ------
+     * AX = 0, CH = Start scan line, CL = End scan line, DH = Row, DL = Column
      */
     case 0x03:
         if (DEBUG_INT10) fprintf (stderr, "int 10h, ah=03h\n");
+        regs->ax = 0x0000;
         regs->cx = 0x0007;
         regs->dx = 0x0000;
         break;
 
     /* 
      * INT 10h, AH=O9h - Write character and attribute at cursor position
-     * AL = Character, BH = Page Number, BL = Color, CX = Number of times to print character
+     *
+     * Return
+     * ------
+     * AL = Character
+     * BH = Page Number, BL = Color
+     * CX = Number of times to print character
      */
     case 0x09:
         for (i=0;i<regs->cx;i++)
@@ -164,7 +183,7 @@ void handle_bios_int13 (struct vm *guest)
     /* INT 13h, AH=00h - Reset Disk Drive */
     case 0x00:
         if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=00h\n");
-        regs->flags &= 0xFFFE;  /* Clear CF */
+        CLEAR (regs->flags, FLAG_CF);
         regs->ax &= 0x00FF;     /* AH = 0x00 */
         break;
 
@@ -187,7 +206,7 @@ void handle_bios_int13 (struct vm *guest)
             ((uint16_t) ebda_chs_params->sectors_per_track & 0x003F));
 
         /* Status of last hard disk drive operation = OK */
-        regs->flags &= 0xFFFE;  /* Clear CF */
+        CLEAR (regs->flags, FLAG_CF);
         regs->ax = 0x0000;
         *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
 
@@ -204,7 +223,7 @@ void handle_bios_int13 (struct vm *guest)
         regs->cx = 0x0001;
 
         /* Status of last hard disk drive operation = OK */
-        regs->flags &= 0xFFFE;  /* Clear CF */
+        CLEAR (regs->flags, FLAG_CF);
         *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
 
         break;
@@ -220,8 +239,6 @@ void handle_bios_int13 (struct vm *guest)
      *    successfully transferred
      */
     case 0x42:
-        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=42h\n");
-
         dap = (struct disk_address_packet *)
             gpa_to_hva (guest, rmode_to_gpa (regs->ds, regs->si));
 
@@ -239,7 +256,7 @@ void handle_bios_int13 (struct vm *guest)
             pexit ("disk_read()");
 
         /* Status of last hard disk drive operation = OK */
-        regs->flags &= 0xFFFE;  /* Clear CF */
+        CLEAR (regs->flags, FLAG_CF);
         regs->ax &= 0x00FF;     /* AH = 0x00 */
         *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
 
@@ -281,7 +298,7 @@ void handle_bios_int13 (struct vm *guest)
         params->sector_size = 512;
 
         /* Status of last hard disk drive operation = OK */
-        regs->flags &= 0xFFFE;  /* Clear CF */
+        CLEAR (regs->flags, FLAG_CF);
         regs->ax &= 0x00FF;     /* AH = 0x00 */
         *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
 
@@ -292,7 +309,7 @@ void handle_bios_int13 (struct vm *guest)
      */
     case 0x4b:
         if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=4bh\n");
-        regs->flags |= 0x0001;  /* Error, set CF */
+        SET (regs->flags, FLAG_CF); 
         break;
 
     default:
@@ -381,14 +398,51 @@ void handle_bios_int15 (struct vm *guest)
         regs->bx = 3;
         break;
     default:
-        regs->flags |= 0x0001;  /* Set CF */
+        SET (regs->flags, FLAG_CF); 
         regs->ax = 0x86;        /* Function not supported */
         return;
     }
 
-    regs->flags &= 0xFFFE;      // Clear CF
+    CLEAR (regs->flags, FLAG_CF);
     regs->ax = 0x4150;
     regs->cx = 0x14;
+}
+
+
+void handle_bios_int16 (struct vm *guest)
+{
+    struct ebda_registers *regs = (struct ebda_registers *)
+        gpa_to_hva (guest, EBDA_ADDR + EBDA_REGS_OFFSET);
+
+    switch (HBYTE (regs->ax)) {
+
+    /* 
+     * INT 16h, AH=O0h - Read keystroke
+     * AH = BIOS scan code
+     * AL = ASCII character
+     */
+    case 0x00:
+        regs->ax = 0x1C0A; /* ENTER key press */
+        break;
+
+    /* 
+     * INT 16h, AH=O1h - Check for keystroke
+     * ZF clear if keystroke available
+     * AH = BIOS scan code
+     * AL = ASCII character
+     */
+    case 0x01:
+        if (DEBUG_INT16) fprintf (stderr, "int 16h, ah=01h\n");
+        CLEAR (regs->flags, FLAG_ZF); 
+        regs->ax = 0x1C0A; /* ENTER key press */
+        break;
+
+    default:
+        fprintf (stderr, "handle_bios_int16(): ah=%xh not implemented\n",
+                 HBYTE (regs->ax));
+        dump_ebda_regs (guest);
+        exit (1);
+    }
 }
 
 
@@ -412,8 +466,8 @@ void handle_bios_int1a (struct vm *guest)
         if (DEBUG_INT1A) fprintf (stderr, "int 1ah, ax=00h\n");
         elapsed = times (&dummy) - guest->clock_start;
         if (elapsed > 0) {
-            regs->cx = (int16_t) (elapsed & 0xFFFF);
-            regs->dx = (int16_t) ((elapsed & 0xFFFF0000) >> 16);
+            regs->cx = (uint16_t) (elapsed & 0xFFFF);
+            regs->dx = (uint16_t) ((elapsed & 0xFFFF0000) >> 16);
         } else {
             regs->cx = 0x0000;
             regs->dx = 0x0000;

@@ -5,8 +5,15 @@
 #define HC_BIOS_INT10 0x10
 #define HC_BIOS_INT13 0x13
 #define HC_BIOS_INT15 0x15
+#define HC_BIOS_INT16 0x16
 #define HC_BIOS_INT1A 0x1A
 #define HC_PANIC 0xFF
+
+#define FLAG_CF 0x0001
+#define FLAG_ZF 0x0040
+#define CLEAR(reg,flag) reg &= (uint16_t) (~flag)
+#define SET(reg,flag) reg |= (uint16_t) flag
+
 
 #ifdef __EXIT_IO__
 void handle_exit_io (struct vm *);
@@ -15,6 +22,7 @@ void handle_exit_io_serial (struct vm *);
 void handle_bios_int10 (struct vm *);
 void handle_bios_int13 (struct vm *);
 void handle_bios_int15 (struct vm *);
+void handle_bios_int16 (struct vm *);
 void handle_bios_int1a (struct vm *);
 #else
 extern void handle_exit_io (struct vm *);

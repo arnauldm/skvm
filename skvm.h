@@ -3,7 +3,7 @@
 #define MBYTE (1<<20)
 #define GBYTE (1<<30)
 
-#define RAM_SIZE (32*MBYTE)     /* Memory in bytes */
+#define RAM_SIZE (128*MBYTE)     /* Memory in bytes */
 #define KVM_FILE "/dev/kvm"     /* KVM special file */
 
 #define BYTE(x) ((uint8_t) x & 0xFF)
