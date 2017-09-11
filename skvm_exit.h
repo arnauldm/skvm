@@ -34,24 +34,24 @@ extern void handle_exit_hlt (void);
  * (http://www.ctyme.com/intr/rb-0708.htm)
  */
 struct disk_address_packet {
-    uint8_t size_of;    /* Size of this struct */
-    uint8_t reserved;   /* Should be at 0 */
-    uint16_t count;     /* Number of sectors to be read */
-    uint32_t buffer;    /* Segment:offset pointer to the buffer */
-    uint64_t sector;    /* Starting sector number (1st sector has number 0) */
+    uint8_t size_of;            /* Size of this struct */
+    uint8_t reserved;           /* Should be at 0 */
+    uint16_t count;             /* Number of sectors to be read */
+    uint32_t buffer;            /* Segment:offset pointer to the buffer */
+    uint64_t sector;            /* Starting sector number (1st sector has number 0) */
 } __attribute__ ((packed));
 
 /*
  * INT 13h AH=48h - Get Drive Parameters
  */
 struct drive_parameters {
-    uint16_t size_of;       /* = 26 */
+    uint16_t size_of;           /* = 26 */
     uint16_t flags;
-    uint32_t cyl;           /* Number of cylinders */
-    uint32_t head;          /* Number of heads */
-    uint32_t sectors_per_track;   /* Number of sectors per track */
-    uint64_t sectors;       /* Absolute number of sectors */
-    uint16_t sector_size;   /* Bytes per sector */
+    uint32_t cyl;               /* Number of cylinders */
+    uint32_t head;              /* Number of heads */
+    uint32_t sectors_per_track; /* Number of sectors per track */
+    uint64_t sectors;           /* Absolute number of sectors */
+    uint16_t sector_size;       /* Bytes per sector */
 } __attribute__ ((packed));
 
 /* flags bits */
@@ -76,5 +76,3 @@ struct e820_entry {
 #define E820_RESERVED 0x02
 #define E820_ACPI     0x03
 #define E820_ACPI_NVS 0x04
-
-

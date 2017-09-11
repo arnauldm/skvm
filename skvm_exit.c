@@ -27,9 +27,9 @@
 #define true  1
 #define DEBUG_INT10 false
 #define DEBUG_INT13 false
-#define DEBUG_INT15 true
+#define DEBUG_INT15 false
 #define DEBUG_INT16 true
-#define DEBUG_INT1A true
+#define DEBUG_INT1A false
 
 
 void handle_exit_io (struct vm *guest)
@@ -102,58 +102,73 @@ void handle_bios_int10 (struct vm *guest)
 
     switch (HBYTE (regs->ax)) {
 
-    /* 
-     * INT 10h, AH=O1h - Video set text-mode cursor shape
-     */
     case 0x01:
-        if (DEBUG_INT10) fprintf (stderr, "int 10h, ah=01h\n");
+
+        /*
+         * INT 10h, AH=O1h - Video set text-mode cursor shape
+         */
+
+        if (DEBUG_INT10)
+            fprintf (stderr, "int 10h, ah=01h\n");
         break;
 
-    /* 
-     * INT 10h, AH=O2h - Set cursor position
-     *
-     * Return
-     * ------
-     * BH = Page Number, DH = Row, DL = Column
-     */
     case 0x02:
-        if (DEBUG_INT10) fprintf (stderr, "int 10h, ah=02h\n");
+
+        /*
+         * INT 10h, AH=O2h - Set cursor position
+         *
+         * Return
+         * ------
+         *   BH = Page Number, DH = Row, DL = Column
+         */
+
+        if (DEBUG_INT10)
+            fprintf (stderr, "int 10h, ah=02h\n");
         break;
 
-    /* 
-     * INT 10h, AH=O3h - Video Read Cursor Position and Size
-     * (http://vitaly_filatov.tripod.com/ng/asm/asm_023.4.html) 
-     *
-     * Return
-     * ------
-     * AX = 0, CH = Start scan line, CL = End scan line, DH = Row, DL = Column
-     */
     case 0x03:
-        if (DEBUG_INT10) fprintf (stderr, "int 10h, ah=03h\n");
+
+        /*
+         * INT 10h, AH=O3h - Video Read Cursor Position and Size
+         * (http://vitaly_filatov.tripod.com/ng/asm/asm_023.4.html)
+         *
+         * Return
+         * ------
+         *   AX = 0
+         *   CH = Start scan line, CL = End scan line
+         *   DH = Row, DL = Column
+         */
+
+        if (DEBUG_INT10)
+            fprintf (stderr, "int 10h, ah=03h\n");
         regs->ax = 0x0000;
         regs->cx = 0x0007;
         regs->dx = 0x0000;
         break;
 
-    /* 
-     * INT 10h, AH=O9h - Write character and attribute at cursor position
-     *
-     * Return
-     * ------
-     * AL = Character
-     * BH = Page Number, BL = Color
-     * CX = Number of times to print character
-     */
     case 0x09:
-        for (i=0;i<regs->cx;i++)
+
+        /*
+         * INT 10h, AH=O9h - Write character and attribute at cursor position
+         *
+         * Return
+         * ------
+         *   AL = Character
+         *   BH = Page Number, BL = Color
+         *   CX = Number of times to print character
+         */
+
+        for (i = 0; i < regs->cx; i++)
             console_out (BYTE (regs->ax));
         break;
 
-    /* 
-     * INT 10h, AH=OEh - Video teletype output
-     * (http://www.ctyme.com/intr/rb-0106.htm)
-     */
     case 0x0E:
+
+        /*
+         * INT 10h, AH=OEh - Video teletype output
+         *   (http://www.ctyme.com/intr/rb-0106.htm)
+         */
+
         console_out (BYTE (regs->ax));
         break;
 
@@ -168,7 +183,7 @@ void handle_bios_int10 (struct vm *guest)
 
 void handle_bios_int13 (struct vm *guest)
 {
-    uint32_t buffer_GPA;    /* Guest Physical Address (GPA) */
+    uint32_t buffer_GPA;        /* Guest Physical Address (GPA) */
     struct disk_address_packet *dap;
     struct drive_parameters *params;
     struct ebda_drive_chs_params *ebda_chs_params;
@@ -180,42 +195,55 @@ void handle_bios_int13 (struct vm *guest)
 
     switch (HBYTE (regs->ax)) {
 
-    /* INT 13h, AH=00h - Reset Disk Drive */
     case 0x00:
-        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=00h\n");
+
+        /*
+         * INT 13h, AH=00h - Reset Disk Drive
+         */
+
+        if (DEBUG_INT13)
+            fprintf (stderr, "int 13h, ah=00h\n");
         CLEAR (regs->flags, FLAG_CF);
         regs->ax &= 0x00FF;     /* AH = 0x00 */
         break;
 
-    /* INT 13h, AH=08h - Read drive parameters */
     case 0x08:
-        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=08h\n");
+
+        /*
+         * INT 13h, AH=08h - Read drive parameters
+         */
+
+        if (DEBUG_INT13)
+            fprintf (stderr, "int 13h, ah=08h\n");
 
         ebda_chs_params = (struct ebda_drive_chs_params *)
             gpa_to_hva (guest, EBDA_ADDR + EBDA_DISK1_OFFSET);
 
         /* DH   last index of heads = number_of - 1
          * DL   number of hard disk drives
-         * CX [7:6] [15:8]  last index of cylinders = number_of - 1 
+         * CX [7:6] [15:8]  last index of cylinders = number_of - 1
          *    [5:0]         last index of sectors per track = number_of */
         regs->dx = (uint16_t)
-           ((((uint16_t) ebda_chs_params->head - 1) << 8) + 1);
+            ((((uint16_t) ebda_chs_params->head - 1) << 8) + 1);
         regs->cx = (uint16_t)
-           (((ebda_chs_params->cyl & 0x00FF) << 8) +
-            ((ebda_chs_params->cyl & 0x0300) >> 2) +
-            ((uint16_t) ebda_chs_params->sectors_per_track & 0x003F));
+            (((ebda_chs_params->cyl & 0x00FF) << 8) +
+             ((ebda_chs_params->cyl & 0x0300) >> 2) +
+             ((uint16_t) ebda_chs_params->sectors_per_track & 0x003F));
 
         /* Status of last hard disk drive operation = OK */
         CLEAR (regs->flags, FLAG_CF);
         regs->ax = 0x0000;
         *((uint8_t *) gpa_to_hva (guest, BDA_ADDR + 0x74)) = 0x00;
 
-    /*
-     * INT 13h, AH=41h - Check extensions present
-     * (http://www.ctyme.com/intr/rb-0706.htm) 
-     */
     case 0x41:
-        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=41h\n");
+
+        /*
+         * INT 13h, AH=41h - Check extensions present
+         * (http://www.ctyme.com/intr/rb-0706.htm)
+         */
+
+        if (DEBUG_INT13)
+            fprintf (stderr, "int 13h, ah=41h\n");
         regs->ax = 0x0100;      /* 1.x */
         regs->bx = 0xAA55;
 
@@ -228,17 +256,19 @@ void handle_bios_int13 (struct vm *guest)
 
         break;
 
-    /*
-     * INT 13h AH=42h - Extended read
-     *    (http://www.ctyme.com/intr/rb-0708.htm)
-     * result  
-     * ------  
-     *    CF clear if successful
-     *    AH = 00h if successful or error code
-     *    disk address packet's block count field set to number of blocks
-     *    successfully transferred
-     */
     case 0x42:
+
+        /*
+         * INT 13h AH=42h - Extended read
+         *
+         * Return
+         * ------
+         *    CF clear if successful
+         *    AH = 00h if successful or error code
+         *    disk address packet's block count field set to number of blocks
+         *    successfully transferred
+         */
+
         dap = (struct disk_address_packet *)
             gpa_to_hva (guest, rmode_to_gpa (regs->ds, regs->si));
 
@@ -246,8 +276,10 @@ void handle_bios_int13 (struct vm *guest)
             ((dap->buffer >> 12) & 0xFFFF0) + (dap->buffer & 0xFFFF);
 
         //fprintf (stderr, "disk address packet: %x:%x\n", regs->ds, regs->si);
-        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=42h: sector: %ld, count: %d, buffer: %x (0x%x)\n",
-                 dap->sector, dap->count, dap->buffer, buffer_GPA);
+        if (DEBUG_INT13)
+            fprintf (stderr,
+                     "int 13h, ah=42h: sector: %ld, count: %d, buffer: %x (0x%x)\n",
+                     dap->sector, dap->count, dap->buffer, buffer_GPA);
 
         ret =
             disk_read (guest, gpa_to_hva (guest, buffer_GPA), dap->sector,
@@ -262,21 +294,24 @@ void handle_bios_int13 (struct vm *guest)
 
         break;
 
-    /* 
-     * INT 13h AH=48h - Get Drive Parameters
-     *
-     * Input
-     * -----
-     * DL   drive number
-     * DS:SI    address of result buffer
-     *
-     * Return
-     * ------
-     * AH   0
-     * DS:SI    result
-     */
     case 0x48:
-        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=48h\n");
+
+        /*
+         * INT 13h AH=48h - Get Drive Parameters
+         *
+         * Input
+         * -----
+         *   DL   drive number
+         *   DS:SI    address of result buffer
+         *
+         * Return
+         * ------
+         *   AH   0
+         *   DS:SI    result
+         */
+
+        if (DEBUG_INT13)
+            fprintf (stderr, "int 13h, ah=48h\n");
 
         ebda_chs_params = (struct ebda_drive_chs_params *)
             gpa_to_hva (guest, EBDA_ADDR + EBDA_DISK1_OFFSET);
@@ -285,9 +320,9 @@ void handle_bios_int13 (struct vm *guest)
             gpa_to_hva (guest, rmode_to_gpa (regs->ds, regs->si));
 
         params->size_of = 26;
-        params->flags   = FLAGS_CHS_IS_VALID;
-        params->cyl     = ebda_chs_params->cyl;
-        params->head    = ebda_chs_params->head;
+        params->flags = FLAGS_CHS_IS_VALID;
+        params->cyl = ebda_chs_params->cyl;
+        params->head = ebda_chs_params->head;
         params->sectors_per_track = ebda_chs_params->sectors_per_track;
 
         disk_size = lseek (guest->disk_fd, 0, SEEK_END);
@@ -304,12 +339,15 @@ void handle_bios_int13 (struct vm *guest)
 
         break;
 
-    /* 
-     * INT 13h AH=4Bh - Bootable CD-ROM - get status
-     */
     case 0x4b:
-        if (DEBUG_INT13) fprintf (stderr, "int 13h, ah=4bh\n");
-        SET (regs->flags, FLAG_CF); 
+
+        /*
+         * INT 13h AH=4Bh - Bootable CD-ROM - get status
+         */
+
+        if (DEBUG_INT13)
+            fprintf (stderr, "int 13h, ah=4bh\n");
+        SET (regs->flags, FLAG_CF);
         break;
 
     default:
@@ -348,38 +386,39 @@ void handle_bios_int15 (struct vm *guest)
     }
 
     /*
-     * INT 15h, AX=E820h - Query System Address Map 
+     * INT 15h, AX=E820h - Query System Address Map
      * ============================================
-     * Input 
+     * Input
      * -----
-     * EDX = 534D4150h ('SMAP')
-     * EBX = continuation value or 00000000h to start at beginning of map
-     * ECX = size of buffer for result, in bytes (should be >= 20 bytes)
-     * ES:DI -> buffer for result
-     * 
-     * Return   
+     *   EDX = 534D4150h ('SMAP')
+     *   EBX = continuation value or 00000000h to start at beginning of map
+     *   ECX = size of buffer for result, in bytes (should be >= 20 bytes)
+     *   ES:DI -> buffer for result
+     *
+     * Return
      * ------
-     * CF clear if successful, set on error
-     * EAX = 534D4150h ('SMAP') or error code (86h)
-     * ES:DI buffer filled
-     * EBX = next offset from which to copy or 00000000h if all done
-     * ECX = actual length returned in bytes
-     * 
+     *   CF clear if successful, set on error
+     *   EAX = 534D4150h ('SMAP') or error code (86h)
+     *   ES:DI buffer filled
+     *   EBX = next offset from which to copy or 00000000h if all done
+     *   ECX = actual length returned in bytes
+     *
      * Memory map address descriptor
-     * ------------------------------ 
-     * Offset  Size    Description  
-     * 00h    QWORD   base address
-     * 08h    QWORD   length in bytes
-     * 10h    DWORD   type of address 
-     * 
+     * ------------------------------
+     *   Offset  Size    Description
+     *   00h    QWORD   base address
+     *   08h    QWORD   length in bytes
+     *   10h    DWORD   type of address
+     *
      * Type of address
      * ---------------
-     * 01h    memory, available to OS
-     * 02h    reserved, not available (e.g. system ROM, memory-mapped device)
-     * 03h    ACPI Reclaim Memory (usable by OS after reading ACPI tables)
-     * 04h    ACPI NVS Memory (OS is required to save this memory between NVS
+     *   01h    memory, available to OS
+     *   02h    reserved, not available (e.g. system ROM, memory-mapped device)
+     *   03h    ACPI Reclaim Memory (usable by OS after reading ACPI tables)
+     *   04h    ACPI NVS Memory (OS is required to save this memory between NVS
      */
-    if (DEBUG_INT15) fprintf (stderr, "int 15h, ax=e820h\n");
+    if (DEBUG_INT15)
+        fprintf (stderr, "int 15h, ax=e820h\n");
 
     switch (regs->bx) {
     case 0:
@@ -398,7 +437,7 @@ void handle_bios_int15 (struct vm *guest)
         regs->bx = 3;
         break;
     default:
-        SET (regs->flags, FLAG_CF); 
+        SET (regs->flags, FLAG_CF);
         regs->ax = 0x86;        /* Function not supported */
         return;
     }
@@ -416,25 +455,36 @@ void handle_bios_int16 (struct vm *guest)
 
     switch (HBYTE (regs->ax)) {
 
-    /* 
-     * INT 16h, AH=O0h - Read keystroke
-     * AH = BIOS scan code
-     * AL = ASCII character
-     */
     case 0x00:
-        regs->ax = 0x1C0A; /* ENTER key press */
+
+        /*
+         * INT 16h, AH=O0h - Read keystroke
+         *
+         * Return
+         * ------
+         *   AH = BIOS scan code
+         *   AL = ASCII character
+         */
+
+        regs->ax = 0x1C0A;      /* ENTER key press */
         break;
 
-    /* 
-     * INT 16h, AH=O1h - Check for keystroke
-     * ZF clear if keystroke available
-     * AH = BIOS scan code
-     * AL = ASCII character
-     */
     case 0x01:
-        if (DEBUG_INT16) fprintf (stderr, "int 16h, ah=01h\n");
-        CLEAR (regs->flags, FLAG_ZF); 
-        regs->ax = 0x1C0A; /* ENTER key press */
+
+        /*
+         * INT 16h, AH=O1h - Check for keystroke
+         *
+         * Return
+         * ------
+         *   ZF clear if keystroke available
+         *   AH = BIOS scan code
+         *   AL = ASCII character
+         */
+
+        if (DEBUG_INT16)
+            fprintf (stderr, "int 16h, ah=01h\n");
+        CLEAR (regs->flags, FLAG_ZF);
+        regs->ax = 0x1C0A;      /* ENTER key press */
         break;
 
     default:
@@ -455,15 +505,20 @@ void handle_bios_int1a (struct vm *guest)
 
     switch (HBYTE (regs->ax)) {
 
-    /*
-     * INT 1Ah AH=00h - Read current time
-     * result:
-     *    CX High word of tick count
-     *    DX Low word of tick count
-     *    AL 00h = Day rollover has not occurred 
-     */
     case 0x00:
-        if (DEBUG_INT1A) fprintf (stderr, "int 1ah, ax=00h\n");
+
+        /*
+         * INT 1Ah AH=00h - Read current time
+         *
+         * Return
+         * ------
+         *   CX High word of tick count
+         *   DX Low word of tick count
+         *   AL 00h = Day rollover has not occurred
+         */
+
+        if (DEBUG_INT1A)
+            fprintf (stderr, "int 1ah, ax=00h\n");
         elapsed = times (&dummy) - guest->clock_start;
         if (elapsed > 0) {
             regs->cx = (uint16_t) (elapsed & 0xFFFF);
@@ -486,11 +541,11 @@ void handle_bios_int1a (struct vm *guest)
 
 void handle_exit_io_serial (struct vm *guest)
 {
-    // fprintf (stderr, "handle_exit_io_serial()\n");
+    fprintf (stderr, "handle_exit_io_serial()\n");
 
     if (guest->kvm_run->io.direction == KVM_EXIT_IO_OUT) {
 
-        /* Linux/Documentation/virtual/kvm/api.txt - 
+        /* Linux/Documentation/virtual/kvm/api.txt -
          * "data_offset describes where the data is located
          * (KVM_EXIT_IO_OUT) or where kvm expects application code to
          * place the data for the next KVM_RUN invocation

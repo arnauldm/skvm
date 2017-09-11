@@ -153,13 +153,16 @@ int main (int argc, char **argv)
      * Note - BIOS memory region is set as read-only for the guest kernel. It's
      * not really needeed as there's not real threat, but it's more "clean"
      * like that. */
-    region = (struct kvm_userspace_memory_region) {
-        .slot = 0,          /* bits 0-15 of "slot" specifies the slot id */
-        .flags = 0,         /* none or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
-        .guest_phys_addr = 0,       /* start of the VM physical memory */
-        .memory_size = guest.ram_size,      /* bytes */
-        .userspace_addr = (uint64_t) guest.vm_ram,  /* start of the userspace allocated memory */
-    };
+    region = (struct kvm_userspace_memory_region) {     /* Bits 0-15 of "slot" specifies the slot id */
+        .slot = 0,
+        /* None or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
+        .flags = 0,
+        /* Start of the VM physical memory */
+        .guest_phys_addr = 0,
+        /* Bytes */
+        .memory_size = guest.ram_size,
+        /* Start of the userspace allocated memory */
+        .userspace_addr = (uint64_t) guest.vm_ram, };
 
     ret = ioctl (guest.vm_fd, KVM_SET_USER_MEMORY_REGION, &region);
     if (ret < 0)
@@ -280,7 +283,7 @@ int main (int argc, char **argv)
         pexit ("lseek");
 
     fprintf (stderr, "disk size: %ld bytes (%ld MB)\n",
-        disk_size, disk_size / 0x100000);
+             disk_size, disk_size / 0x100000);
 
     hd = (struct ebda_drive_chs_params *)
         gpa_to_hva (&guest, EBDA_ADDR + EBDA_DISK1_OFFSET);
@@ -293,8 +296,9 @@ int main (int argc, char **argv)
     if (hd->cyl > 1023)
         pexit ("disk too big");
 
-    fprintf (stderr, "disk geometry: CHS = %d / %d / %d (absolutes sectors: %ld)\n",
-        hd->cyl, hd->head, hd->sectors_per_track, disk_size/512);
+    fprintf (stderr,
+             "disk geometry: CHS = %d / %d / %d (absolutes sectors: %ld)\n",
+             hd->cyl, hd->head, hd->sectors_per_track, disk_size / 512);
 
     /* Set starting time (in clock ticks) */
     struct tms dummy;
@@ -322,8 +326,8 @@ int main (int argc, char **argv)
         case KVM_EXIT_FAIL_ENTRY:
             fprintf (stderr,
                      "KVM_EXIT_FAIL_ENTRY: fail_entry.hardware_entry_failure_reason: = 0x%llx\n",
-                     guest.kvm_run->fail_entry.
-                     hardware_entry_failure_reason);
+                     guest.kvm_run->
+                     fail_entry.hardware_entry_failure_reason);
             return 1;
 
         case KVM_EXIT_MMIO:

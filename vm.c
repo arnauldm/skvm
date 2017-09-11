@@ -32,7 +32,8 @@ uint32_t rmode_to_gpa (uint16_t segment, uint16_t offset)
  * sector - starting sector (1st sector is 0)
  * count  - how many sectors 
  */
-ssize_t disk_read (struct vm *guest, char *buffer, size_t sector, size_t count)
+ssize_t disk_read (struct vm * guest, char *buffer, size_t sector,
+                   size_t count)
 {
     if (lseek (guest->disk_fd, (off_t) sector * 512, SEEK_SET) < 0)
         return -1;
