@@ -18,10 +18,12 @@
 
 #define __EXIT_IO__
 #include "vm.h"
+#include "emulators.h"
 #include "util.h"
 #include "skvm.h"
 #include "skvm_exit.h"
 #include "skvm_debug.h"
+#include "serial.h"
 
 #define false 0
 #define true  1
@@ -159,7 +161,7 @@ void handle_bios_int10 (struct vm *guest)
          */
 
         for (i = 0; i < regs->cx; i++)
-            console_out (BYTE (regs->ax));
+            video_out (BYTE (regs->ax));
         break;
 
     case 0x0E:
@@ -169,7 +171,7 @@ void handle_bios_int10 (struct vm *guest)
          *   (http://www.ctyme.com/intr/rb-0106.htm)
          */
 
-        console_out (BYTE (regs->ax));
+        video_out (BYTE (regs->ax));
         break;
 
     default:
@@ -541,6 +543,7 @@ void handle_bios_int1a (struct vm *guest)
 
 void handle_exit_io_serial (struct vm *guest)
 {
+    ssize_t ret;
     fprintf (stderr, "handle_exit_io_serial()\n");
 
     if (guest->kvm_run->io.direction == KVM_EXIT_IO_OUT) {
@@ -551,9 +554,12 @@ void handle_exit_io_serial (struct vm *guest)
          * place the data for the next KVM_RUN invocation
          * (KVM_EXIT_IO_IN)" */
 
-        write (STDERR_FILENO,
-               (char *) (guest->kvm_run) + guest->kvm_run->io.data_offset,
-               guest->kvm_run->io.size);
+        ret =
+            serial_out ((char *) (guest->kvm_run) +
+                        guest->kvm_run->io.data_offset,
+                        guest->kvm_run->io.size);
+        if (ret < 0)
+            perror ("serial_out");
 
     } else {
         fprintf (stderr, "unhandled KVM_EXIT_IO (port: 0x%x)\n",
@@ -569,3 +575,4 @@ void handle_exit_hlt (void)
     fprintf (stderr, "Guest halted\n");
     exit (0);
 }
+

@@ -14,7 +14,7 @@ all: $(BUILD) $(BIN) $(GUEST) $(BIOS)
 $(BUILD):
 	mkdir $@
 
-$(BIN): $(BUILD)/skvm.o $(BUILD)/skvm_exit.o $(BUILD)/skvm_debug.o $(BUILD)/util.o $(BUILD)/vm.o
+$(BIN): $(BUILD)/skvm.o $(BUILD)/skvm_exit.o $(BUILD)/skvm_debug.o $(BUILD)/util.o $(BUILD)/vm.o $(BUILD)/emulators.o $(BUILD)/serial.o
 	$(GCC) -o $@ $^
 
 $(BUILD)/%.o: %.c
@@ -34,5 +34,5 @@ clean:
 	rm -f $(BUILD)/* $(BIOS) *~
 
 run: $(BIN) $(GUEST) $(BIOS)
-	@echo launch: $(BIN) --guest $(GUEST) --bios $(BIOS)
-	@$(BIN) --guest $(GUEST) --bios $(BIOS)
+	@echo launch: $(BIN) --guest $(GUEST) --bios $(BIOS) --serial /tmp/skvm.sock
+	@$(BIN) --guest $(GUEST) --bios $(BIOS) --serial /tmp/skvm.sock

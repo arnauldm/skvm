@@ -25,6 +25,4 @@ struct vm {
 extern void *gpa_to_hva (struct vm *, uint64_t);
 uint32_t rmode_to_gpa (uint16_t, uint16_t);
 extern void set_ivt (struct vm *, uint16_t, uint16_t, uint16_t);
-extern int disk_read (struct vm *, char *, size_t, size_t);
-extern void console_out (uint8_t);
 #endif

@@ -21,6 +21,8 @@
 #include "skvm.h"
 #include "skvm_exit.h"
 #include "util.h"
+#include "serial.h"
+#include "emulators.h"
 
 
 
@@ -29,6 +31,7 @@ int main (int argc, char **argv)
     struct vm guest;
     char *guest_file = NULL;
     char *bios_file = NULL;
+    char *serial_file = NULL;
 
     int bios_fd;                /* File descriptor to the BIOS rom file */
     int kvm_fd;                 /* Mainly file descriptor to "/dev/kvm" file */
@@ -57,11 +60,12 @@ int main (int argc, char **argv)
         static struct option long_options[] = {
             {"bios", required_argument, 0, 'b'},
             {"guest", required_argument, 0, 'g'},
+            {"serial", required_argument, 0, 's'},
             {0, 0, 0, 0}
         };
 
         int index = 0;
-        int c = getopt_long (argc, argv, "b:g:", long_options, &index);
+        int c = getopt_long (argc, argv, "b:g:s:", long_options, &index);
 
         if (c == -1)
             break;
@@ -73,17 +77,24 @@ int main (int argc, char **argv)
         case 'g':
             guest_file = optarg;
             break;
+        case 's':
+            serial_file = optarg;
+            break;
         default:
             break;
         }
     }
 
-    if (bios_file == NULL || guest_file == NULL) {
+    if (bios_file == NULL || guest_file == NULL || serial_file == NULL) {
         fprintf (stderr,
                  "usage: [OPTIONS]\n--bios, -b\tbios file\n"
-                 "--guest, -g\tguest file\n");
+                 "--guest, -g\tguest file\n"
+                 "--serial, -g\tserial file\n");
         exit (1);
     }
+
+    /* Create a Unix socket for further serial communications */
+    init_serial (serial_file);
 
     /*********************** 
      * Create and set a VM
@@ -155,14 +166,14 @@ int main (int argc, char **argv)
      * like that. */
     region = (struct kvm_userspace_memory_region) {     /* Bits 0-15 of "slot" specifies the slot id */
         .slot = 0,
-        /* None or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
-        .flags = 0,
-        /* Start of the VM physical memory */
-        .guest_phys_addr = 0,
-        /* Bytes */
-        .memory_size = guest.ram_size,
-        /* Start of the userspace allocated memory */
-        .userspace_addr = (uint64_t) guest.vm_ram, };
+            /* None or KVM_MEM_READONLY or KVM_MEM_LOG_DIRTY_PAGES */
+            .flags = 0,
+            /* Start of the VM physical memory */
+            .guest_phys_addr = 0,
+            /* Bytes */
+            .memory_size = guest.ram_size,
+            /* Start of the userspace allocated memory */
+    .userspace_addr = (uint64_t) guest.vm_ram,};
 
     ret = ioctl (guest.vm_fd, KVM_SET_USER_MEMORY_REGION, &region);
     if (ret < 0)
@@ -326,8 +337,8 @@ int main (int argc, char **argv)
         case KVM_EXIT_FAIL_ENTRY:
             fprintf (stderr,
                      "KVM_EXIT_FAIL_ENTRY: fail_entry.hardware_entry_failure_reason: = 0x%llx\n",
-                     guest.kvm_run->
-                     fail_entry.hardware_entry_failure_reason);
+                     guest.kvm_run->fail_entry.
+                     hardware_entry_failure_reason);
             return 1;
 
         case KVM_EXIT_MMIO:

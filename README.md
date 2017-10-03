@@ -39,14 +39,23 @@ and execute :
 To launch it, you can execute `make run` or, at command line :
 
 ```Shell
-  ./build/skvm --guest build/guest --bios build/minibios
+  ./build/skvm --guest build/guest --bios build/minibios --serial /tmp/skvm.sock
 ```
 
 Note that you can play with some other guest and/or BIOS implementations. For
 example :
 
 ```Shell
-  ./build/skvm --bios /opt/bochs-2.6.9/share/bochs/BIOS-bochs-legacy --guest ~/vm/guest.raw
+  ./build/skvm \
+  --bios /opt/bochs-2.6.9/share/bochs/BIOS-bochs-legacy \
+  --guest ~/vm/guest.raw \
+  --serial /tmp/skvm.sock
+```
+
+You can also use `minicom` to display guest usage of the serial port :
+
+```Shell
+  minicom -D unix\#/tmp/skvm.sock
 ```
 
 # Components
